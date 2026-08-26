@@ -22,4 +22,11 @@ clientes: {
   obtener: (id) => ipcRenderer.invoke('clientes:obtener', id),
   editar: (id, cambios) => ipcRenderer.invoke('clientes:editar', id, cambios),
 },
+planes: {
+  crear: (plan) => ipcRenderer.invoke('planes:crear', plan),
+  listar: () => ipcRenderer.invoke('planes:listar'),
+  obtener: (id) => ipcRenderer.invoke('planes:obtener', id),
+  editar: (id, cambios) => ipcRenderer.invoke('planes:editar', id, cambios),
+  desactivar: (id) => ipcRenderer.invoke('planes:desactivar', id),
+},
 });
