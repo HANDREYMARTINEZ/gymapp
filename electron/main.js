@@ -4,6 +4,7 @@ const { conectar } = require('./db/connection');
 require('./ipc/config');
 require('./ipc/setup');
 require('./ipc/auth');
+require('./ipc/clientes');
 
 let mainWindow;
 

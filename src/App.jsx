@@ -5,12 +5,14 @@ import PasoAdmin from './screens/Setup/PasoAdmin';
 import PasoPassphrase from './screens/Setup/PasoPassphrase';
 import Login from './screens/Login';
 import Layout from './components/Layout';
+import Clientes from './screens/Clientes';
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
   const [setupCompleto, setSetupCompleto] = useState(false);
   const [paso, setPaso] = useState(1);
   const [usuarioActual, setUsuarioActual] = useState(null);
+   const [pantallaActiva, setPantallaActiva] = useState('kiosco');
 
   useEffect(() => {
     window.api.setup.estado().then(estado => {
@@ -37,9 +39,14 @@ export default function App() {
   }
 
   return (
-    <Layout usuarioActual={usuarioActual} onCerrarSesion={() => setUsuarioActual(null)}>
-      <h1>Bienvenido, {usuarioActual.nombre}</h1>
-      <p>(Aquí irán las pantallas reales: Kiosco, Clientes, POS... a partir de F1)</p>
+    <Layout
+      usuarioActual={usuarioActual}
+      pantallaActiva={pantallaActiva}
+      onSeleccionar={setPantallaActiva}
+      onCerrarSesion={() => setUsuarioActual(null)}
+    >
+      {pantallaActiva === 'clientes' && <Clientes />}
+      {pantallaActiva !== 'clientes' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
   );
 }
