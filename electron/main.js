@@ -1,14 +1,28 @@
 const { app, BrowserWindow } = require('electron');
+const path = require('path');
 const { conectar } = require('./db/connection');
+require('./ipc/config');
+
+let mainWindow;
 
 app.whenReady().then(() => {
   conectar();
 
-  const win = new BrowserWindow({ width: 1200, height: 800 });
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+
   if (process.env.NODE_ENV === 'development') {
-    win.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5173');
   } else {
-    win.loadFile('dist/index.html');
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 });
 
