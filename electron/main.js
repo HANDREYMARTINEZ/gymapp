@@ -1,6 +1,9 @@
 const { app, BrowserWindow } = require('electron');
+const { conectar } = require('./db/connection');
 
 app.whenReady().then(() => {
+  conectar();
+
   const win = new BrowserWindow({ width: 1200, height: 800 });
   if (process.env.NODE_ENV === 'development') {
     win.loadURL('http://localhost:5173');
