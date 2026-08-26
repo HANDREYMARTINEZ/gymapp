@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld('api', {
     crearAdmin: (datos) => ipcRenderer.invoke('setup:crear-admin', datos),
     finalizar: (passphrase) => ipcRenderer.invoke('setup:finalizar', passphrase),
   },
+
+  auth: {
+  login: (usuario, password) => ipcRenderer.invoke('auth:login', usuario, password),
+},
 });

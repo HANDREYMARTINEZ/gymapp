@@ -3,6 +3,7 @@ const path = require('path');
 const { conectar } = require('./db/connection');
 require('./ipc/config');
 require('./ipc/setup');
+require('./ipc/auth');
 
 let mainWindow;
 
@@ -29,4 +30,5 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+
 });

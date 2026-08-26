@@ -3,11 +3,14 @@ import PasoBienvenida from './screens/Setup/PasoBienvenida';
 import PasoDatosGimnasio from './screens/Setup/PasoDatosGimnasio';
 import PasoAdmin from './screens/Setup/PasoAdmin';
 import PasoPassphrase from './screens/Setup/PasoPassphrase';
+import Login from './screens/Login';
+import Layout from './components/Layout';
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
   const [setupCompleto, setSetupCompleto] = useState(false);
   const [paso, setPaso] = useState(1);
+  const [usuarioActual, setUsuarioActual] = useState(null);
 
   useEffect(() => {
     window.api.setup.estado().then(estado => {
@@ -18,16 +21,25 @@ export default function App() {
 
   if (cargando) return <p style={{ padding: 40 }}>Cargando...</p>;
 
-  if (setupCompleto) {
-    return <div style={{ padding: 40 }}><h1>Configuración completa</h1><p>(Aquí irá el Login en la Etapa 9)</p></div>;
+  if (!setupCompleto) {
+    return (
+      <div style={{ padding: 40 }}>
+        {paso === 1 && <PasoBienvenida onSiguiente={() => setPaso(2)} />}
+        {paso === 2 && <PasoDatosGimnasio onSiguiente={() => setPaso(3)} />}
+        {paso === 3 && <PasoAdmin onSiguiente={() => setPaso(4)} />}
+        {paso === 4 && <PasoPassphrase onFinalizar={() => setSetupCompleto(true)} />}
+      </div>
+    );
+  }
+
+  if (!usuarioActual) {
+    return <Login onLogin={setUsuarioActual} />;
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      {paso === 1 && <PasoBienvenida onSiguiente={() => setPaso(2)} />}
-      {paso === 2 && <PasoDatosGimnasio onSiguiente={() => setPaso(3)} />}
-      {paso === 3 && <PasoAdmin onSiguiente={() => setPaso(4)} />}
-      {paso === 4 && <PasoPassphrase onFinalizar={() => setSetupCompleto(true)} />}
-    </div>
+    <Layout usuarioActual={usuarioActual} onCerrarSesion={() => setUsuarioActual(null)}>
+      <h1>Bienvenido, {usuarioActual.nombre}</h1>
+      <p>(Aquí irán las pantallas reales: Kiosco, Clientes, POS... a partir de F1)</p>
+    </Layout>
   );
 }
