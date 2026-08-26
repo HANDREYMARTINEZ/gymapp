@@ -1,19 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import PasoBienvenida from './screens/Setup/PasoBienvenida';
+import PasoDatosGimnasio from './screens/Setup/PasoDatosGimnasio';
+import PasoAdmin from './screens/Setup/PasoAdmin';
+import PasoPassphrase from './screens/Setup/PasoPassphrase';
 
 export default function App() {
-  const [resultado, setResultado] = useState('(sin probar)');
+  const [cargando, setCargando] = useState(true);
+  const [setupCompleto, setSetupCompleto] = useState(false);
+  const [paso, setPaso] = useState(1);
 
-  async function probar() {
-    await window.api.config.set('prueba', 'hola desde React');
-    const valor = await window.api.config.get('prueba');
-    setResultado(valor);
+  useEffect(() => {
+    window.api.setup.estado().then(estado => {
+      setSetupCompleto(estado.setupCompleto);
+      setCargando(false);
+    });
+  }, []);
+
+  if (cargando) return <p style={{ padding: 40 }}>Cargando...</p>;
+
+  if (setupCompleto) {
+    return <div style={{ padding: 40 }}><h1>Configuración completa</h1><p>(Aquí irá el Login en la Etapa 9)</p></div>;
   }
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>GymApp — esqueleto vivo</h1>
-      <button onClick={probar}>Probar IPC</button>
-      <p>Resultado: {resultado}</p>
+      {paso === 1 && <PasoBienvenida onSiguiente={() => setPaso(2)} />}
+      {paso === 2 && <PasoDatosGimnasio onSiguiente={() => setPaso(3)} />}
+      {paso === 3 && <PasoAdmin onSiguiente={() => setPaso(4)} />}
+      {paso === 4 && <PasoPassphrase onFinalizar={() => setSetupCompleto(true)} />}
     </div>
   );
 }

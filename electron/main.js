@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { conectar } = require('./db/connection');
 require('./ipc/config');
+require('./ipc/setup');
 
 let mainWindow;
 
