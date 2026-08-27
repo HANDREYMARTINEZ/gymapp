@@ -28,5 +28,7 @@ planes: {
   obtener: (id) => ipcRenderer.invoke('planes:obtener', id),
   editar: (id, cambios) => ipcRenderer.invoke('planes:editar', id, cambios),
   desactivar: (id) => ipcRenderer.invoke('planes:desactivar', id),
+  activar: (id) => ipcRenderer.invoke('planes:activar', id),
+  listarTodos: () => ipcRenderer.invoke('planes:listarTodos'), 
 },
 });

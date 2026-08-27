@@ -40,4 +40,14 @@ function desactivar(id) {
   return true;
 }
 
-module.exports = { crear, listar, obtenerPorId, editar, desactivar };
+function activar(id) {
+  getDb().prepare(`UPDATE planes SET activo = 1 WHERE id = ?`).run(id);
+  return true;
+}
+
+function listarTodos() {
+  return getDb().prepare(`SELECT * FROM planes ORDER BY activo DESC, nombre`).all();
+}
+
+module.exports = { crear, listar, listarTodos, obtenerPorId, editar, desactivar, activar };
+

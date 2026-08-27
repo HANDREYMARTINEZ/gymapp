@@ -6,6 +6,7 @@ import PasoPassphrase from './screens/Setup/PasoPassphrase';
 import Login from './screens/Login';
 import Layout from './components/Layout';
 import Clientes from './screens/Clientes';
+import Planes from './screens/Planes';
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
@@ -46,7 +47,8 @@ export default function App() {
       onCerrarSesion={() => setUsuarioActual(null)}
     >
       {pantallaActiva === 'clientes' && <Clientes />}
-      {pantallaActiva !== 'clientes' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
+      {pantallaActiva === 'planes' && <Planes />}
+      {pantallaActiva !== 'clientes' && pantallaActiva !== 'planes' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
   );
 }
