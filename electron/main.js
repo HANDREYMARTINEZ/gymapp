@@ -7,6 +7,7 @@ require('./ipc/auth');
 require('./ipc/clientes');
 require('./ipc/planes');
 require('./ipc/membresias');
+require('./ipc/pausas');
 
 
 let mainWindow;

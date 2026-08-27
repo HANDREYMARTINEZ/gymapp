@@ -39,4 +39,10 @@ membresias: {
   listarPagos: (membresiaId) => ipcRenderer.invoke('membresias:listarPagos', membresiaId),
 },
 
+pausas: {
+  pausar: (datos) => ipcRenderer.invoke('pausas:pausar', datos),
+  reactivar: (membresiaId) => ipcRenderer.invoke('pausas:reactivar', membresiaId),
+  listarPorMembresia: (membresiaId) => ipcRenderer.invoke('pausas:listarPorMembresia', membresiaId),
+},
+
 });

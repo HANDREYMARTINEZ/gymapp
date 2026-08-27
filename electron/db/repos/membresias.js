@@ -1,6 +1,8 @@
 const { getDb } = require('../connection');
 const { format, addDays, parseISO } = require('date-fns');
 const { calcularFechaInicioRenovacion, estadoMembresia } = require('../../services/membresias-logica');
+const { hayPausaActiva } = require('./pausas');
+
 
 function hoyISO() {
   return format(new Date(), 'yyyy-MM-dd');
@@ -73,9 +75,11 @@ function listarPorCliente(clienteId) {
   `).all(clienteId);
 
   return membresias.map(m => {
-    const saldoPendiente = calcularSaldoPendiente(m.id);
-    return { ...m, saldoPendiente, estado: estadoMembresia(m, hoyISO(), false, saldoPendiente) };
-  });
+  const saldoPendiente = calcularSaldoPendiente(m.id);
+  const pausaActiva = hayPausaActiva(m.id);
+  return { ...m, saldoPendiente, estado: estadoMembresia(m, hoyISO(), pausaActiva, saldoPendiente) };
+});
+ 
 }
 
 function listarPagos(membresiaId) {
