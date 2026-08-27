@@ -31,4 +31,12 @@ planes: {
   activar: (id) => ipcRenderer.invoke('planes:activar', id),
   listarTodos: () => ipcRenderer.invoke('planes:listarTodos'), 
 },
+
+membresias: {
+  vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
+  registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),
+  listarPorCliente: (clienteId) => ipcRenderer.invoke('membresias:listarPorCliente', clienteId),
+  listarPagos: (membresiaId) => ipcRenderer.invoke('membresias:listarPagos', membresiaId),
+},
+
 });
