@@ -49,5 +49,11 @@ function editar(id, cambios) {
   `).run({ ...cambios, documento, ult4, id });
   return true;
 }
+async function asignarPin(id, pinTextoPlano) {
+  const argon2 = require('argon2');
+  const hash = await argon2.hash(pinTextoPlano);
+  getDb().prepare(`UPDATE clientes SET pin = ? WHERE id = ?`).run(hash, id);
+  return true;
+}
 
-module.exports = { crear, buscar, obtenerPorId, editar };
+module.exports = { crear, buscar, obtenerPorId, editar, asignarPin };

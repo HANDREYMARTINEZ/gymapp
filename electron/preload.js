@@ -21,6 +21,7 @@ clientes: {
   buscar: (texto) => ipcRenderer.invoke('clientes:buscar', texto),
   obtener: (id) => ipcRenderer.invoke('clientes:obtener', id),
   editar: (id, cambios) => ipcRenderer.invoke('clientes:editar', id, cambios),
+  asignarPin: (id, pin) => ipcRenderer.invoke('clientes:asignarPin', id, pin),
 },
 planes: {
   crear: (plan) => ipcRenderer.invoke('planes:crear', plan),
