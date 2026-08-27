@@ -9,6 +9,7 @@ require('./ipc/planes');
 require('./ipc/membresias');
 require('./ipc/pausas');
 require('./ipc/asistencias');
+require('./ipc/kiosco');
 
 
 let mainWindow;

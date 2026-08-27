@@ -51,5 +51,8 @@ asistencias: {
   listarDelDia: (fecha) => ipcRenderer.invoke('asistencias:listarDelDia', fecha),
 },
 
+kiosco: {
+  marcarPorPin: (datos) => ipcRenderer.invoke('kiosco:marcarPorPin', datos),
+},
 
 });
