@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import ClienteForm from './ClienteForm';
+import ClienteFicha from './ClienteFicha';
 
 export default function Clientes() {
   const [query, setQuery] = useState('');
   const [resultados, setResultados] = useState([]);
-  const [modo, setModo] = useState('lista'); // 'lista' | 'nuevo' | 'editar'
+  const [modo, setModo] = useState('lista'); // 'lista' | 'nuevo' | 'editar' | 'ficha'
   const [clienteEditando, setClienteEditando] = useState(null);
+  const [clienteFichaId, setClienteFichaId] = useState(null);
 
   async function buscar(texto) {
     setQuery(texto);
@@ -17,24 +19,23 @@ export default function Clientes() {
     setResultados(r);
   }
 
-  async function abrirEditar(id) {
-    const cliente = await window.api.clientes.obtener(id);
-    setClienteEditando(cliente);
-    setModo('editar');
+  function abrirFicha(id) {
+    setClienteFichaId(id);
+    setModo('ficha');
   }
 
   function volverALista() {
     setModo('lista');
     setClienteEditando(null);
-    buscar(query); // refresca resultados por si algo cambió
+    setClienteFichaId(null);
+    buscar(query);
   }
 
   return (
     <div>
-      <h1>Clientes</h1>
-
       {modo === 'lista' && (
         <>
+          <h1>Clientes</h1>
           <input
             placeholder="Buscar por nombre o documento..."
             value={query}
@@ -45,7 +46,7 @@ export default function Clientes() {
 
           <ul style={{ listStyle: 'none', padding: 0, marginTop: 20 }}>
             {resultados.map(c => (
-              <li key={c.id} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => abrirEditar(c.id)}>
+              <li key={c.id} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => abrirFicha(c.id)}>
                 <b>{c.nombre}</b> — {c.documento || 'sin documento'} — {c.telefono || 'sin teléfono'}
               </li>
             ))}
@@ -56,6 +57,13 @@ export default function Clientes() {
 
       {modo === 'nuevo' && <ClienteForm onGuardado={volverALista} onCancelar={volverALista} />}
       {modo === 'editar' && <ClienteForm clienteExistente={clienteEditando} onGuardado={volverALista} onCancelar={volverALista} />}
+      {modo === 'ficha' && (
+        <ClienteFicha
+          clienteId={clienteFichaId}
+          onVolver={volverALista}
+          onEditar={(cliente) => { setClienteEditando(cliente); setModo('editar'); }}
+        />
+      )}
     </div>
   );
 }
