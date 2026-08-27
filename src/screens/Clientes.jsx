@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ClienteForm from './ClienteForm';
 import ClienteFicha from './ClienteFicha';
 
-export default function Clientes() {
+export default function Clientes({ usuarioActual }) {
   const [query, setQuery] = useState('');
   const [resultados, setResultados] = useState([]);
   const [modo, setModo] = useState('lista'); // 'lista' | 'nuevo' | 'editar' | 'ficha'
@@ -59,9 +59,10 @@ export default function Clientes() {
       {modo === 'editar' && <ClienteForm clienteExistente={clienteEditando} onGuardado={volverALista} onCancelar={volverALista} />}
       {modo === 'ficha' && (
         <ClienteFicha
-          clienteId={clienteFichaId}
-          onVolver={volverALista}
-          onEditar={(cliente) => { setClienteEditando(cliente); setModo('editar'); }}
+        clienteId={clienteFichaId}
+        usuarioActual={usuarioActual}
+        onVolver={volverALista}
+        onEditar={(cliente) => { setClienteEditando(cliente); setModo('editar'); }}
         />
       )}
     </div>

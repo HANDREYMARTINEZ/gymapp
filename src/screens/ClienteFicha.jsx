@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import VenderMembresiaForm from './VenderMembresiaForm';
+import RegistrarPagoForm from './RegistrarPagoForm';
 
 const COLOR_ESTADO = {
   activa: '#2e7d32',
@@ -20,18 +22,24 @@ const LABEL_ESTADO = {
   anulada: 'Anulada',
 };
 
-export default function ClienteFicha({ clienteId, onEditar, onVolver }) {
+export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVolver }) {
   const [cliente, setCliente] = useState(null);
   const [membresias, setMembresias] = useState([]);
   const [expandidaId, setExpandidaId] = useState(null);
   const [pagosPorMembresia, setPagosPorMembresia] = useState({});
   const [pausasPorMembresia, setPausasPorMembresia] = useState({});
+  const [mostrarVender, setMostrarVender] = useState(false);
+  const [mostrarPagoId, setMostrarPagoId] = useState(null);
+  const [mostrarPausaId, setMostrarPausaId] = useState(null);
+  const [motivoPausa, setMotivoPausa] = useState('');
 
   async function cargar() {
     const c = await window.api.clientes.obtener(clienteId);
     setCliente(c);
     const m = await window.api.membresias.listarPorCliente(clienteId);
     setMembresias(m);
+    setPagosPorMembresia({});
+    setPausasPorMembresia({});
   }
 
   useEffect(() => { cargar(); }, [clienteId]);
@@ -42,14 +50,32 @@ export default function ClienteFicha({ clienteId, onEditar, onVolver }) {
       return;
     }
     setExpandidaId(membresiaId);
-    if (!pagosPorMembresia[membresiaId]) {
-      const pagos = await window.api.membresias.listarPagos(membresiaId);
-      setPagosPorMembresia(prev => ({ ...prev, [membresiaId]: pagos }));
-    }
-    if (!pausasPorMembresia[membresiaId]) {
-      const pausas = await window.api.pausas.listarPorMembresia(membresiaId);
-      setPausasPorMembresia(prev => ({ ...prev, [membresiaId]: pausas }));
-    }
+    const pagos = await window.api.membresias.listarPagos(membresiaId);
+    setPagosPorMembresia(prev => ({ ...prev, [membresiaId]: pagos }));
+    const pausas = await window.api.pausas.listarPorMembresia(membresiaId);
+    setPausasPorMembresia(prev => ({ ...prev, [membresiaId]: pausas }));
+  }
+
+  async function confirmarPausa(membresiaId) {
+    await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
+    setMostrarPausaId(null);
+    setMotivoPausa('');
+    cargar();
+  }
+
+  async function reactivar(membresiaId) {
+    await window.api.pausas.reactivar(membresiaId);
+    cargar();
+  }
+
+  function despuesDeVender() {
+    setMostrarVender(false);
+    cargar();
+  }
+
+  function despuesDePago() {
+    setMostrarPagoId(null);
+    cargar();
   }
 
   if (!cliente) return <p>Cargando...</p>;
@@ -81,6 +107,32 @@ export default function ClienteFicha({ clienteId, onEditar, onVolver }) {
             <p style={{ color: '#e65100', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
           )}
 
+          {m.anulada === 0 && (
+            <div style={{ marginTop: 8 }}>
+              {m.saldoPendiente > 0 && (
+                <button onClick={(e) => { e.stopPropagation(); setMostrarPagoId(mostrarPagoId === m.id ? null : m.id); }}>
+                  Registrar pago
+                </button>
+              )}
+              {m.estado === 'pausada'
+                ? <button onClick={(e) => { e.stopPropagation(); reactivar(m.id); }} style={{ marginLeft: 8 }}>Reactivar</button>
+                : <button onClick={(e) => { e.stopPropagation(); setMostrarPausaId(mostrarPausaId === m.id ? null : m.id); }} style={{ marginLeft: 8 }}>Pausar</button>
+              }
+            </div>
+          )}
+
+          {mostrarPausaId === m.id && (
+            <div style={{ marginTop: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }} onClick={e => e.stopPropagation()}>
+              <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
+              <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
+              <button onClick={() => { setMostrarPausaId(null); setMotivoPausa(''); }} style={{ marginLeft: 8 }}>Cancelar</button>
+            </div>
+          )}
+
+          {mostrarPagoId === m.id && (
+            <RegistrarPagoForm membresiaId={m.id} usuarioActual={usuarioActual} onGuardado={despuesDePago} onCancelar={() => setMostrarPagoId(null)} />
+          )}
+
           {expandidaId === m.id && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' }}>
               <p>Precio acordado: ${m.precio_pagado.toLocaleString('es-CO')} {m.descuento > 0 && `(descuento ${m.descuento}%)`}</p>
@@ -108,6 +160,11 @@ export default function ClienteFicha({ clienteId, onEditar, onVolver }) {
           )}
         </div>
       ))}
+
+      {mostrarVender
+        ? <VenderMembresiaForm clienteId={clienteId} usuarioActual={usuarioActual} onVendido={despuesDeVender} onCancelar={() => setMostrarVender(false)} />
+        : <button onClick={() => setMostrarVender(true)}>+ Vender membresía</button>
+      }
     </div>
   );
 }

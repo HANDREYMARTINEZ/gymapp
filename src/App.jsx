@@ -46,7 +46,7 @@ export default function App() {
       onSeleccionar={setPantallaActiva}
       onCerrarSesion={() => setUsuarioActual(null)}
     >
-      {pantallaActiva === 'clientes' && <Clientes />}
+      {pantallaActiva === 'clientes' && <Clientes usuarioActual={usuarioActual} />}
       {pantallaActiva === 'planes' && <Planes />}
       {pantallaActiva !== 'clientes' && pantallaActiva !== 'planes' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
