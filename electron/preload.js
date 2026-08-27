@@ -46,4 +46,10 @@ pausas: {
   listarPorMembresia: (membresiaId) => ipcRenderer.invoke('pausas:listarPorMembresia', membresiaId),
 },
 
+asistencias: {
+  registrar: (datos) => ipcRenderer.invoke('asistencias:registrar', datos),
+  listarDelDia: (fecha) => ipcRenderer.invoke('asistencias:listarDelDia', fecha),
+},
+
+
 });

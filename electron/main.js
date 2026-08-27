@@ -8,6 +8,7 @@ require('./ipc/clientes');
 require('./ipc/planes');
 require('./ipc/membresias');
 require('./ipc/pausas');
+require('./ipc/asistencias');
 
 
 let mainWindow;
