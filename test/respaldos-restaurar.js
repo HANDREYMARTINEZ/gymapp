@@ -105,6 +105,43 @@ app.whenReady().then(async () => {
           estadoFinal && estadoFinal.valor === 'A',
           'leyo: ' + (estadoFinal ? estadoFinal.valor : 'null'));
 
+    // --- escenario 3: un .gymbak del formato viejo ---
+    // Los primeros respaldos se guardaban como hexadecimal en texto, sin marca.
+    // Uno de esos puede ser el unico que quede el dia que haga falta, asi que
+    // tiene que seguir restaurandose. Se fabrica uno a mano con el formato viejo.
+    log('--- escenario 3: restaurar un respaldo del formato antiguo (hex) ---');
+
+    conn.getDb().prepare("UPDATE config SET valor = 'D' WHERE clave = 'estado'").run();
+
+    // Se fuerza el checkpoint antes de leer el archivo: sin el, el 'D' recien
+    // escrito seguiria en el -wal y el respaldo de prueba saldria sin el. Es el
+    // mismo bug que se arreglo en el codigo, aqui reproducido a proposito.
+    conn.getDb().pragma('wal_checkpoint(TRUNCATE)');
+
+    const AdmZip = require('adm-zip');
+    const zipViejo = new AdmZip();
+    const dbBytes = fs.readFileSync(dbPath);
+    zipViejo.addFile('gym.db', dbBytes);
+    const cifradoBin = dek.cifrarBuffer(zipViejo.toBuffer(), dek.obtenerDekEnMemoria());
+
+    const rutaVieja = path.join(testDir, 'respaldo-formato-viejo.gymbak');
+    fs.writeFileSync(rutaVieja, cifradoBin.toString('hex'), 'utf-8');
+
+    const contenidoViejo = fs.readFileSync(rutaVieja);
+    check('el archivo de prueba esta en el formato viejo (hex, sin marca)',
+          !contenidoViejo.subarray(0, 8).equals(Buffer.from('GYMBAK1:', 'utf-8')));
+
+    const resVieja = backup.restaurarRespaldo(rutaVieja);
+    check('restaurar un respaldo del formato viejo se acepta', resVieja.ok,
+          'motivo=' + resVieja.motivo);
+    conn.getDb().close();
+    conn.conectar();
+
+    const estadoViejo = conn.getDb().prepare("SELECT valor FROM config WHERE clave='estado'").get();
+    check('y devuelve el contenido que tenia guardado',
+          estadoViejo && estadoViejo.valor === 'D',
+          'leyo: ' + (estadoViejo ? estadoViejo.valor : 'null'));
+
     conn.getDb().close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

@@ -9,6 +9,16 @@ const { getDb } = require('../db/connection');
 
 const MAX_RESPALDOS = 14; // ~2 semanas si se genera uno por día
 
+// Los .gymbak nuevos empiezan por esta marca y siguen en binario. Los de la
+// primera version eran el hexadecimal a secas, sin marca, asi que la marca es lo
+// que permite leer los dos: un respaldo viejo tiene que seguir restaurandose,
+// porque puede ser el unico que quede el dia que haga falta.
+const MARCA = Buffer.from('GYMBAK1:', 'utf-8');
+
+function pareceFormatoNuevo(buffer) {
+  return buffer.length > MARCA.length && buffer.subarray(0, MARCA.length).equals(MARCA);
+}
+
 function carpetaRespaldosDefault() {
   return path.join(app.getPath('userData'), 'respaldos');
 }
@@ -54,13 +64,13 @@ async function generarRespaldo(carpetaDestino) {
   fs.mkdirSync(destino, { recursive: true });
 
   const zipBuffer = await comprimirDb();
-  const cifradoHex = cifrarBuffer(zipBuffer, dek);
+  const cifrado = cifrarBuffer(zipBuffer, dek);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const nombreArchivo = `respaldo-${timestamp}.gymbak`;
   const rutaCompleta = path.join(destino, nombreArchivo);
 
-  fs.writeFileSync(rutaCompleta, cifradoHex, 'utf-8');
+  fs.writeFileSync(rutaCompleta, Buffer.concat([MARCA, cifrado]));
 
   rotarRespaldos(destino);
 
@@ -98,8 +108,15 @@ function restaurarRespaldo(rutaArchivo) {
     throw new Error('No se puede restaurar: la app no está desbloqueada');
   }
 
-  const cifradoHex = fs.readFileSync(rutaArchivo, 'utf-8');
-  const zipBuffer = descifrarBuffer(cifradoHex, dek);
+  const contenido = fs.readFileSync(rutaArchivo);
+
+  let zipBuffer;
+  if (pareceFormatoNuevo(contenido)) {
+    zipBuffer = descifrarBuffer(contenido.subarray(MARCA.length), dek);
+  } else {
+    // Formato de la primera version: hexadecimal en texto, sin marca.
+    zipBuffer = descifrarBuffer(Buffer.from(contenido.toString('utf-8'), 'hex'), dek);
+  }
 
   const zip = new AdmZip(zipBuffer);
   const entrada = zip.getEntry('gym.db');

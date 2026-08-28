@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 const { conectar } = require('./db/connection');
 require('./ipc/config');
@@ -21,7 +21,36 @@ require('./ipc/backup');
 
 let mainWindow;
 
+// El menu por defecto de Electron esta en ingles y ofrece cosas que en un
+// mostrador de gimnasio solo estorban o hacen dano (recargar a media venta,
+// herramientas de desarrollo). En produccion se quita del todo; en desarrollo se
+// deja uno minimo, porque recargar y abrir el inspector si hacen falta ahi.
+function instalarMenu() {
+  if (process.env.NODE_ENV !== 'development') {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'Desarrollo',
+      submenu: [
+        { role: 'reload', label: 'Recargar' },
+        { role: 'forceReload', label: 'Recargar forzado' },
+        { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: 'Zoom normal' },
+        { role: 'zoomIn', label: 'Acercar' },
+        { role: 'zoomOut', label: 'Alejar' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Salir' },
+      ],
+    },
+  ]));
+}
+
 app.whenReady().then(() => {
+  instalarMenu();
   conectar();
 
   mainWindow = new BrowserWindow({

@@ -91,5 +91,29 @@ function obtenerDekEnMemoria() {
 
 module.exports.guardarDekEnMemoria = guardarDekEnMemoria;
 module.exports.obtenerDekEnMemoria = obtenerDekEnMemoria;
-module.exports.cifrarBuffer = module.exports.envolverDEK;
-module.exports.descifrarBuffer = module.exports.desenvolverDEK;
+// --- Cifrado de respaldos, en binario --------------------------------------
+//
+// envolverDEK devuelve hexadecimal, que esta bien para los 32 bytes de la DEK
+// guardados en la tabla config. Para un respaldo no: el hexadecimal ocupa el
+// doble, y una base de gimnasio crece durante anios. Estas dos trabajan con
+// Buffer de punta a punta. El formato es el mismo -- iv(12) | tag(16) | datos --
+// solo que sin pasar por texto.
+
+function cifrarBuffer(datos, clave) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', clave, iv);
+  const cifrado = Buffer.concat([cipher.update(datos), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), cifrado]);
+}
+
+function descifrarBuffer(buffer, clave) {
+  const iv = buffer.subarray(0, 12);
+  const tag = buffer.subarray(12, 28);
+  const cifrado = buffer.subarray(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', clave, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(cifrado), decipher.final()]);
+}
+
+module.exports.cifrarBuffer = cifrarBuffer;
+module.exports.descifrarBuffer = descifrarBuffer;

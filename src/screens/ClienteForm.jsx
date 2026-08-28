@@ -6,6 +6,7 @@ export default function ClienteForm({ clienteExistente, onGuardado, onCancelar }
     f_nacimiento: '', contacto_emg: '', notas: '',
   });
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (clienteExistente) {
@@ -23,11 +24,12 @@ export default function ClienteForm({ clienteExistente, onGuardado, onCancelar }
 
   function cambiar(campo, valor) {
     setForm({ ...form, [campo]: valor });
+    setError('');
   }
 
   async function guardar() {
     if (!form.nombre.trim()) {
-      alert('El nombre es obligatorio');
+      setError('El nombre es obligatorio.');
       return;
     }
     setGuardando(true);
@@ -50,8 +52,9 @@ export default function ClienteForm({ clienteExistente, onGuardado, onCancelar }
       <br /><input type="date" placeholder="Fecha de nacimiento" value={form.f_nacimiento} onChange={e => cambiar('f_nacimiento', e.target.value)} />
       <br /><input placeholder="Contacto de emergencia" value={form.contacto_emg} onChange={e => cambiar('contacto_emg', e.target.value)} />
       <br /><textarea placeholder="Notas" value={form.notas} onChange={e => cambiar('notas', e.target.value)} />
-      <br /><button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
-      <button onClick={onCancelar} style={{ marginLeft: 8 }}>Cancelar</button>
+      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      <button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
+      <button onClick={onCancelar} disabled={guardando} style={{ marginLeft: 8 }}>Cancelar</button>
     </div>
   );
 }

@@ -5,6 +5,7 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
   const [planId, setPlanId] = useState('');
   const [descuento, setDescuento] = useState(0);
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     window.api.planes.listar().then(setPlanes);
@@ -12,7 +13,7 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
 
   async function vender() {
     if (!planId) {
-      alert('Selecciona un plan');
+      setError('Selecciona un plan.');
       return;
     }
     setGuardando(true);
@@ -29,7 +30,7 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
   return (
     <div style={{ border: '1px solid #ccc', padding: 16, marginTop: 12, borderRadius: 4 }}>
       <h4>Vender membresía</h4>
-      <select value={planId} onChange={e => setPlanId(e.target.value)}>
+      <select value={planId} onChange={e => { setPlanId(e.target.value); setError(''); }}>
         <option value="">-- Selecciona un plan --</option>
         {planes.map(p => (
           <option key={p.id} value={p.id}>{p.nombre} — ${p.precio.toLocaleString('es-CO')}</option>
@@ -37,8 +38,9 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
       </select>
       <br />
       <label>Descuento %: <input type="number" min="0" max="100" value={descuento} onChange={e => setDescuento(e.target.value)} style={{ width: 60 }} /></label>
-      <br /><button onClick={vender} disabled={guardando} style={{ marginTop: 8 }}>{guardando ? 'Vendiendo...' : 'Vender'}</button>
-      <button onClick={onCancelar} style={{ marginLeft: 8 }}>Cancelar</button>
+      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      <button onClick={vender} disabled={guardando} style={{ marginTop: 8 }}>{guardando ? 'Vendiendo...' : 'Vender'}</button>
+      <button onClick={onCancelar} disabled={guardando} style={{ marginLeft: 8 }}>Cancelar</button>
     </div>
   );
 }

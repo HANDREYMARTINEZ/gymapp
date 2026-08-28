@@ -6,6 +6,7 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
     dias_duracion: '', num_tickets: '', dias_vigencia: '', color: '#4fc3f7',
   });
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (planExistente) {
@@ -23,19 +24,20 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
 
   function cambiar(campo, valor) {
     setForm({ ...form, [campo]: valor });
+    setError('');
   }
 
   async function guardar() {
     if (!form.nombre.trim() || !form.precio) {
-      alert('Nombre y precio son obligatorios');
+      setError('Nombre y precio son obligatorios.');
       return;
     }
     if (form.tipo === 'periodo' && !form.dias_duracion) {
-      alert('Los días de duración son obligatorios para un plan tipo periodo');
+      setError('Los días de duración son obligatorios para un plan de tipo periodo.');
       return;
     }
     if (form.tipo === 'ticketera' && !form.num_tickets) {
-      alert('El número de tickets es obligatorio para un plan tipo ticketera');
+      setError('El número de tickets es obligatorio para un plan de tipo ticketera.');
       return;
     }
 
@@ -82,8 +84,10 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
       )}
 
       <br /><input type="color" value={form.color} onChange={e => cambiar('color', e.target.value)} />
+      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+
       <br /><button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
-      <button onClick={onCancelar} style={{ marginLeft: 8 }}>Cancelar</button>
+      <button onClick={onCancelar} disabled={guardando} style={{ marginLeft: 8 }}>Cancelar</button>
     </div>
   );
 }

@@ -53,9 +53,18 @@ ipcMain.handle('setup:crear-admin', async (_evt, datos) => {
   return r;
 });
 
+// Empaquetada, la app corre desde dentro del asar y __dirname apunta ahi, asi
+// que la ruta relativa a resources/ del proyecto deja de existir. El .pem se
+// copia como extraResource y en produccion vive junto a process.resourcesPath.
+function rutaClavePublica() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'dev-public.pem')
+    : path.join(__dirname, '../../resources/dev-public.pem');
+}
+
 ipcMain.handle('setup:finalizar', (_evt, passphrase) => {
   const db = getDb();
-  const publicKeyPem = fs.readFileSync(path.join(__dirname, '../../resources/dev-public.pem'), 'utf-8');
+  const publicKeyPem = fs.readFileSync(rutaClavePublica(), 'utf-8');
 
   const tx = db.transaction(() => {
     const dek = generarDEK();

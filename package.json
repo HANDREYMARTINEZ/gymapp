@@ -1,7 +1,7 @@
 {
   "name": "gymapp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Administracion de gimnasio: clientes, membresias, asistencias, punto de venta, inventario y caja.",
   "main": "electron/main.js",
   "scripts": {
     "dev:vite": "vite",
@@ -14,10 +14,13 @@
     "test:caja": "node_modules/electron/dist/electron.exe test/caja.js",
     "test:ventas": "node_modules/electron/dist/electron.exe test/ventas.js",
     "test:usuarios": "node_modules/electron/dist/electron.exe test/usuarios.js",
-    "test:dashboard": "node_modules/electron/dist/electron.exe test/dashboard.js"
+    "test:dashboard": "node_modules/electron/dist/electron.exe test/dashboard.js",
+    "build": "vite build && electron-builder --win",
+    "build:dir": "vite build && electron-builder --win --dir",
+    "test:produccion": "vite build && node_modules/electron/dist/electron.exe test/produccion.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "H.A.M.C Solutions",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
@@ -42,5 +45,50 @@
   "allowScripts": {
     "argon2@0.45.1": true,
     "better-sqlite3@13.0.3": true
+  },
+  "build": {
+    "appId": "com.gymapp.escritorio",
+    "productName": "GymApp",
+    "copyright": "H.A.M.C Solutions",
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "index.html",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/dev-public.pem",
+        "to": "dev-public.pem"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/argon2/**"
+    ],
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "GymApp-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GymApp",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

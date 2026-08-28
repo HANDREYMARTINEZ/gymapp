@@ -13,6 +13,18 @@ const testDir = path.join(os.tmpdir(), 'gymapp-test-wal-' + Date.now());
 fs.mkdirSync(testDir, { recursive: true });
 app.setPath('userData', testDir);
 
+// El formato viejo era texto hexadecimal, asi que todos sus bytes caian en
+// [0-9a-f]. Si aparece aunque sea uno fuera de ese rango, el archivo no puede
+// ser hexadecimal en texto: se guardo en binario.
+function esHexEnTexto(buffer) {
+  for (const b of buffer) {
+    const esDigito = b >= 0x30 && b <= 0x39;
+    const esLetra = b >= 0x61 && b <= 0x66;
+    if (!esDigito && !esLetra) return false;
+  }
+  return true;
+}
+
 app.whenReady().then(async () => {
   let fallos = 0;
   const check = (nombre, cond, extra) => {
@@ -55,8 +67,13 @@ app.whenReady().then(async () => {
     check('generarRespaldo devuelve ok', r.ok === true);
     check('el .gymbak existe', fs.existsSync(r.ruta));
 
-    const cifrado = fs.readFileSync(r.ruta, 'utf-8');
-    const zipBuffer = dek.descifrarBuffer(cifrado, dek.obtenerDekEnMemoria());
+    const contenido = fs.readFileSync(r.ruta);
+    const MARCA = Buffer.from('GYMBAK1:', 'utf-8');
+    check('el respaldo lleva la marca de formato', contenido.subarray(0, MARCA.length).equals(MARCA));
+    const cuerpo = contenido.subarray(MARCA.length);
+    check('el respaldo es binario, no hexadecimal en texto',
+          !esHexEnTexto(cuerpo), cuerpo.length + ' bytes');
+    const zipBuffer = dek.descifrarBuffer(cuerpo, dek.obtenerDekEnMemoria());
     const entrada = new AdmZip(zipBuffer).getEntry('gym.db');
     check('el zip contiene gym.db', !!entrada);
 
