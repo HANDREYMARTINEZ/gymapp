@@ -7,6 +7,7 @@ require('./ipc/auth');
 require('./ipc/clientes');
 require('./ipc/planes');
 require('./ipc/productos');
+require('./ipc/caja');
 require('./ipc/membresias');
 require('./ipc/pausas');
 require('./ipc/asistencias');

@@ -57,6 +57,15 @@ productos: {
   historialStock: (id) => ipcRenderer.invoke('productos:historialStock', id),
 },
 
+caja: {
+  sesionAbierta: () => ipcRenderer.invoke('caja:sesionAbierta'),
+  abrir: (datos) => ipcRenderer.invoke('caja:abrir', datos),
+  registrarMovimiento: (datos) => ipcRenderer.invoke('caja:registrarMovimiento', datos),
+  resumen: (sesionId) => ipcRenderer.invoke('caja:resumen', sesionId),
+  cerrar: (datos) => ipcRenderer.invoke('caja:cerrar', datos),
+  listarSesiones: (limite) => ipcRenderer.invoke('caja:listarSesiones', limite),
+},
+
 membresias: {
   vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),

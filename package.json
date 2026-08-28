@@ -8,9 +8,10 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "build:vite": "vite build",
-    "test": "node_modules/electron/dist/electron.exe test/respaldos-wal.js && node_modules/electron/dist/electron.exe test/respaldos-restaurar.js && node_modules/electron/dist/electron.exe test/productos.js",
+    "test": "node_modules/electron/dist/electron.exe test/respaldos-wal.js && node_modules/electron/dist/electron.exe test/respaldos-restaurar.js && node_modules/electron/dist/electron.exe test/productos.js && node_modules/electron/dist/electron.exe test/caja.js",
     "test:respaldos": "node_modules/electron/dist/electron.exe test/respaldos-wal.js && node_modules/electron/dist/electron.exe test/respaldos-restaurar.js",
-    "test:productos": "node_modules/electron/dist/electron.exe test/productos.js"
+    "test:productos": "node_modules/electron/dist/electron.exe test/productos.js",
+    "test:caja": "node_modules/electron/dist/electron.exe test/caja.js"
   },
   "keywords": [],
   "author": "",
