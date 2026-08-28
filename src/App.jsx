@@ -7,6 +7,8 @@ import Login from './screens/Login';
 import Layout from './components/Layout';
 import Clientes from './screens/Clientes';
 import Planes from './screens/Planes';
+import Kiosco from './screens/Kiosco';
+
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
@@ -48,7 +50,8 @@ export default function App() {
     >
       {pantallaActiva === 'clientes' && <Clientes usuarioActual={usuarioActual} />}
       {pantallaActiva === 'planes' && <Planes />}
-      {pantallaActiva !== 'clientes' && pantallaActiva !== 'planes' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
+      {pantallaActiva === 'kiosco' && <Kiosco />}
+      {pantallaActiva !== 'clientes' && panntallaActiva !== 'planes' && pantallaActiva !== 'kiosco' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
   );
 }
