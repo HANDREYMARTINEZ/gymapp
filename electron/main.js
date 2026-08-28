@@ -10,6 +10,7 @@ require('./ipc/membresias');
 require('./ipc/pausas');
 require('./ipc/asistencias');
 require('./ipc/kiosco');
+require('./ipc/desbloqueo');
 
 
 let mainWindow;

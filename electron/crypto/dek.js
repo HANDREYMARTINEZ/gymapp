@@ -78,3 +78,16 @@ module.exports = {
   generarDEK, generarSalt, derivarKEK, envolverDEK, desenvolverDEK,
   envolverDEKConClavePublica, desenvolverDEKConClavePrivada,
 };
+
+let dekEnMemoria = null;
+
+function guardarDekEnMemoria(dek) {
+  dekEnMemoria = dek;
+}
+
+function obtenerDekEnMemoria() {
+  return dekEnMemoria;
+}
+
+module.exports.guardarDekEnMemoria = guardarDekEnMemoria;
+module.exports.obtenerDekEnMemoria = obtenerDekEnMemoria;

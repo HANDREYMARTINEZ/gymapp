@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import Clientes from './screens/Clientes';
 import Planes from './screens/Planes';
 import Kiosco from './screens/Kiosco';
+import Desbloqueo from './screens/Desbloqueo';
 
 
 export default function App() {
@@ -15,7 +16,8 @@ export default function App() {
   const [setupCompleto, setSetupCompleto] = useState(false);
   const [paso, setPaso] = useState(1);
   const [usuarioActual, setUsuarioActual] = useState(null);
-   const [pantallaActiva, setPantallaActiva] = useState('kiosco');
+  const [pantallaActiva, setPantallaActiva] = useState('kiosco');
+  const [desbloqueado, setDesbloqueado] = useState(false);
 
   useEffect(() => {
     window.api.setup.estado().then(estado => {
@@ -35,6 +37,15 @@ export default function App() {
         {paso === 4 && <PasoPassphrase onFinalizar={() => setSetupCompleto(true)} />}
       </div>
     );
+  }
+
+   // AGREGA este bloque nuevo aquí, después del bloque de setup:
+  if (!desbloqueado) {
+    return <Desbloqueo onDesbloqueado={() => setDesbloqueado(true)} />;
+  }
+
+  if (!usuarioActual) {
+    return <Login onLogin={setUsuarioActual} />;
   }
 
   if (!usuarioActual) {
