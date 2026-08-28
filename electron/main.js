@@ -37,7 +37,16 @@ app.whenReady().then(() => {
   }
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  try {
+    const backupService = require('./services/backup');
+    const { obtenerDekEnMemoria } = require('./crypto/dek');
+    if (obtenerDekEnMemoria()) {
+      await backupService.generarRespaldo();
+      console.log('Respaldo automático generado al cerrar la app.');
+    }
+  } catch (e) {
+    console.error('No se pudo generar el respaldo automático al cerrar:', e.message);
+  }
   if (process.platform !== 'darwin') app.quit();
-
 });

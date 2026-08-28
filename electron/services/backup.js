@@ -5,6 +5,7 @@ const { app } = require('electron');
 const { obtenerDekEnMemoria, cifrarBuffer } = require('../crypto/dek');
 const AdmZip = require('adm-zip');
 const { descifrarBuffer } = require('../crypto/dek');
+const { getDb } = require('../db/connection');
 
 const MAX_RESPALDOS = 14; // ~2 semanas si se genera uno por día
 
@@ -12,9 +13,8 @@ function carpetaRespaldosDefault() {
   return path.join(app.getPath('userData'), 'respaldos');
 }
 
-function comprimirDb() {
+function comprimirArchivo(rutaArchivo) {
   return new Promise((resolve, reject) => {
-    const dbPath = path.join(app.getPath('userData'), 'gym.db');
     const chunks = [];
     const archive = archiver('zip', { zlib: { level: 9 } });
 
@@ -22,9 +22,26 @@ function comprimirDb() {
     archive.on('error', reject);
     archive.on('end', () => resolve(Buffer.concat(chunks)));
 
-    archive.file(dbPath, { name: 'gym.db' });
+    archive.file(rutaArchivo, { name: 'gym.db' });
     archive.finalize();
   });
+}
+
+// La base corre en WAL, asi que las transacciones recientes viven en gym.db-wal
+// y no en gym.db. Comprimir gym.db a secas dejaria fuera lo ultimo escrito.
+// db.backup() escribe un snapshot consistente que ya incluye el WAL.
+async function comprimirDb() {
+  const rutaSnapshot = path.join(
+    app.getPath('temp'),
+    `gym-snapshot-${process.pid}-${Date.now()}.db`
+  );
+
+  await getDb().backup(rutaSnapshot);
+  try {
+    return await comprimirArchivo(rutaSnapshot);
+  } finally {
+    fs.rmSync(rutaSnapshot, { force: true });
+  }
 }
 
 async function generarRespaldo(carpetaDestino) {

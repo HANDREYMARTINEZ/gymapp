@@ -14,9 +14,18 @@ function aplicarRestauracionPendiente() {
   const dbPath = path.join(userDataPath, 'gym.db');
 
   if (fs.existsSync(dbPath)) {
-    const respaldoSeguridad = path.join(userDataPath, `gym.db.antes-de-restaurar-${Date.now()}`);
-    fs.renameSync(dbPath, respaldoSeguridad);
-    console.log('Respaldo de seguridad del gym.db anterior guardado en:', respaldoSeguridad);
+    const sufijo = `antes-de-restaurar-${Date.now()}`;
+    // El -wal y el -shm pertenecen a la base que estamos reemplazando. Si se
+    // quedan aqui, SQLite abriria la base restaurada contra el WAL de la
+    // anterior y la corromperia. Se mueven junto con ella, no se borran: asi
+    // el respaldo de seguridad sigue siendo una base completa y restaurable.
+    for (const sidecar of ['', '-wal', '-shm']) {
+      const origen = dbPath + sidecar;
+      if (fs.existsSync(origen)) {
+        fs.renameSync(origen, path.join(userDataPath, `gym.db.${sufijo}${sidecar}`));
+      }
+    }
+    console.log('Respaldo de seguridad del gym.db anterior guardado con sufijo:', sufijo);
   }
 
   fs.renameSync(rutaPendiente, dbPath);
