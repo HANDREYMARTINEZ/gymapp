@@ -66,6 +66,15 @@ caja: {
   listarSesiones: (limite) => ipcRenderer.invoke('caja:listarSesiones', limite),
 },
 
+ventas: {
+  registrar: (datos) => ipcRenderer.invoke('ventas:registrar', datos),
+  obtener: (ventaId) => ipcRenderer.invoke('ventas:obtener', ventaId),
+  listarDelDia: (fecha) => ipcRenderer.invoke('ventas:listarDelDia', fecha),
+  totalesDelDia: (fecha) => ipcRenderer.invoke('ventas:totalesDelDia', fecha),
+  anular: (datos) => ipcRenderer.invoke('ventas:anular', datos),
+  mediosPago: () => ipcRenderer.invoke('ventas:mediosPago'),
+},
+
 membresias: {
   vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),

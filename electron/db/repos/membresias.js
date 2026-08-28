@@ -2,6 +2,8 @@ const { getDb } = require('../connection');
 const { format, addDays, parseISO } = require('date-fns');
 const { calcularFechaInicioRenovacion, estadoMembresia } = require('../../services/membresias-logica');
 const { hayPausaActiva } = require('./pausas');
+const caja = require('./caja');
+const { esEfectivo } = require('../../services/medios-pago');
 
 
 function hoyISO() {
@@ -51,12 +53,50 @@ function vender({ clienteId, planId, usuarioId, descuentoPct = 0 }) {
   return info.lastInsertRowid;
 }
 
+// Un pago en efectivo es dinero que entra al mismo cajon que las ventas, asi que
+// tiene que aparecer en el arqueo. Si no, todo dia con pagos en efectivo cierra
+// con un sobrante falso y el arqueo deja de servir para detectar errores.
+// Por lo mismo se exige la caja abierta: sin sesion el efectivo no tiene donde
+// quedar registrado, y aceptarlo igual seria romper el arqueo en silencio.
 function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
-  getDb().prepare(`
-    INSERT INTO pagos (membresia_id, monto, metodo, fecha, usuario_id, nota, anulada)
-    VALUES (?, ?, ?, ?, ?, ?, 0)
-  `).run(membresiaId, monto, metodo, new Date().toISOString(), usuarioId, nota || null);
-  return true;
+  if (!monto || monto <= 0) {
+    return { ok: false, motivo: 'monto_invalido' };
+  }
+
+  const enEfectivo = esEfectivo(metodo);
+  if (enEfectivo && !caja.sesionAbierta()) {
+    return { ok: false, motivo: 'sin_caja_abierta' };
+  }
+
+  const db = getDb();
+  const tx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO pagos (membresia_id, monto, metodo, fecha, usuario_id, nota, anulada)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
+    `).run(membresiaId, monto, metodo, new Date().toISOString(), usuarioId, nota || null);
+
+    if (enEfectivo) {
+      const mov = caja.registrarMovimiento({
+        tipo: 'ingreso',
+        concepto: 'Pago de membresia #' + membresiaId,
+        monto,
+        usuarioId,
+      });
+      // Se lanza para que la transaccion tumbe tambien el pago: un pago sin su
+      // movimiento de caja es exactamente el descuadre que esto evita.
+      if (!mov.ok) throw new Error('caja_rechazo:' + mov.motivo);
+    }
+  });
+
+  try {
+    tx();
+  } catch (e) {
+    const m = String(e.message).match(/^caja_rechazo:(.+)$/);
+    if (m) return { ok: false, motivo: m[1] };
+    throw e;
+  }
+
+  return { ok: true };
 }
 
 function calcularSaldoPendiente(membresiaId) {
