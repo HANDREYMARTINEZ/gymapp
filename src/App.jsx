@@ -51,7 +51,7 @@ export default function App() {
       {pantallaActiva === 'clientes' && <Clientes usuarioActual={usuarioActual} />}
       {pantallaActiva === 'planes' && <Planes />}
       {pantallaActiva === 'kiosco' && <Kiosco />}
-      {pantallaActiva !== 'clientes' && panntallaActiva !== 'planes' && pantallaActiva !== 'kiosco' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
+      {pantallaActiva !== 'clientes' && pantallaActiva !== 'planes' && pantallaActiva !== 'kiosco' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
   );
 }
