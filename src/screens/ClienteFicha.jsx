@@ -3,13 +3,13 @@ import VenderMembresiaForm from './VenderMembresiaForm';
 import RegistrarPagoForm from './RegistrarPagoForm';
 
 const COLOR_ESTADO = {
-  activa: '#2e7d32',
-  por_vencer: '#f9a825',
-  vencida: '#c62828',
-  agotada: '#c62828',
-  pausada: '#616161',
-  saldo_pendiente: '#e65100',
-  anulada: '#9e9e9e',
+  activa: 'var(--exito-solido)',
+  por_vencer: 'var(--aviso-solido)',
+  vencida: 'var(--error-solido)',
+  agotada: 'var(--error-solido)',
+  pausada: 'var(--neutro-solido)',
+  saldo_pendiente: 'var(--aviso-solido)',
+  anulada: 'var(--neutro-solido)',
 };
 
 const LABEL_ESTADO = {
@@ -84,7 +84,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     <div>
       <button onClick={onVolver}>← Volver a la lista</button>
       <h1 style={{ marginBottom: 4 }}>{cliente.nombre}</h1>
-      <p style={{ color: '#666', marginTop: 0 }}>
+      <p style={{ color: 'var(--texto-suave)', marginTop: 0 }}>
         {cliente.documento || 'sin documento'} — {cliente.telefono || 'sin teléfono'} — {cliente.email || 'sin email'}
       </p>
       <button onClick={() => onEditar(cliente)}>Editar datos del cliente</button>
@@ -93,18 +93,18 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
       {membresias.length === 0 && <p>Este cliente no tiene ninguna membresía todavía.</p>}
 
       {membresias.map(m => (
-        <div key={m.id} style={{ border: '1px solid #ddd', borderRadius: 4, marginBottom: 10, padding: 12 }}>
+        <div key={m.id} style={{ border: '1px solid var(--borde-suave)', borderRadius: 4, marginBottom: 10, padding: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => expandir(m.id)}>
             <div>
               <b>{m.plan_nombre}</b> ({m.plan_tipo === 'periodo' ? `${m.f_inicio} → ${m.f_fin}` : `${m.tickets_totales - m.tickets_usados} de ${m.tickets_totales} tickets`})
             </div>
-            <span style={{ color: 'white', background: COLOR_ESTADO[m.estado] || '#999', padding: '2px 10px', borderRadius: 12, fontSize: 12 }}>
+            <span style={{ color: 'var(--texto)', background: COLOR_ESTADO[m.estado] || 'var(--neutro-solido)', padding: '2px 10px', borderRadius: 12, fontSize: 12 }}>
               {LABEL_ESTADO[m.estado] || m.estado}
             </span>
           </div>
 
           {m.saldoPendiente > 0 && (
-            <p style={{ color: '#e65100', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
+            <p style={{ color: 'var(--aviso)', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
           )}
 
           {m.anulada === 0 && (
@@ -122,7 +122,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
           )}
 
           {mostrarPausaId === m.id && (
-            <div style={{ marginTop: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }} onClick={e => e.stopPropagation()}>
+            <div style={{ marginTop: 8, padding: 8, background: 'var(--superficie-alta)', borderRadius: 4 }} onClick={e => e.stopPropagation()}>
               <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
               <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
               <button onClick={() => { setMostrarPausaId(null); setMotivoPausa(''); }} style={{ marginLeft: 8 }}>Cancelar</button>
@@ -134,7 +134,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
           )}
 
           {expandidaId === m.id && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--borde-suave)' }}>
               <p>Precio acordado: ${m.precio_pagado.toLocaleString('es-CO')} {m.descuento > 0 && `(descuento ${m.descuento}%)`}</p>
 
               <h4>Pagos</h4>

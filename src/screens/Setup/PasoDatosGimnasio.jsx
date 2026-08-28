@@ -28,7 +28,7 @@ export default function PasoDatosGimnasio({ onSiguiente }) {
       <br /><input placeholder="Dirección" value={form.direccion} onChange={e => cambiar('direccion', e.target.value)} />
       <br /><input placeholder="Teléfono" value={form.telefono} onChange={e => cambiar('telefono', e.target.value)} />
       <br /><input placeholder="NIT" value={form.nit} onChange={e => cambiar('nit', e.target.value)} />
-      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 380 }}>{error}</p>}
       <button onClick={continuar} disabled={guardando}>{guardando ? 'Guardando...' : 'Siguiente'}</button>
     </div>
   );

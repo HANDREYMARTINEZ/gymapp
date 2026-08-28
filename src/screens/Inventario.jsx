@@ -33,9 +33,9 @@ function AjusteStock({ producto, usuarioActual, onListo, onCancelar }) {
   }
 
   return (
-    <div style={{ border: '1px solid #333', padding: 16, marginTop: 16, maxWidth: 480 }}>
+    <div style={{ border: '1px solid var(--borde-fuerte)', padding: 16, marginTop: 16, maxWidth: 480 }}>
       <h3 style={{ marginTop: 0 }}>Ajustar stock — {producto.nombre}</h3>
-      <p style={{ color: '#555' }}>En existencia ahora: <b>{producto.stock}</b></p>
+      <p style={{ color: 'var(--texto-suave)' }}>En existencia ahora: <b>{producto.stock}</b></p>
 
       <select value={sentido} onChange={e => { setSentido(e.target.value); setError(''); }}>
         <option value="entrada">Entrada (compra, devolución)</option>
@@ -48,7 +48,7 @@ function AjusteStock({ producto, usuarioActual, onListo, onCancelar }) {
                    onChange={e => setMotivo(e.target.value)}
                    style={{ marginTop: 8, width: '100%' }} />
 
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
       <button onClick={aplicar} disabled={guardando} style={{ marginTop: 8 }}>
         {guardando ? 'Aplicando...' : 'Aplicar ajuste'}
@@ -129,7 +129,7 @@ export default function Inventario({ usuarioActual }) {
       )}
 
       {porDesactivar && (
-        <div style={{ border: '2px solid darkred', padding: 16, marginTop: 16, maxWidth: 480 }}>
+        <div style={{ border: '2px solid var(--error)', padding: 16, marginTop: 16, maxWidth: 480 }}>
           <p style={{ marginTop: 0 }}>
             ¿Desactivar <b>{porDesactivar.nombre}</b>? Dejará de aparecer en el POS.
             Su historial y su stock se conservan, y puedes reactivarlo cuando quieras.
@@ -141,7 +141,7 @@ export default function Inventario({ usuarioActual }) {
 
       <table style={{ marginTop: 20, borderCollapse: 'collapse', width: '100%' }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
             <th>Producto</th><th>Categoría</th><th>Venta</th><th>Costo</th>
             <th>Stock</th><th>Mín.</th><th>Estado</th><th></th>
           </tr>
@@ -150,15 +150,15 @@ export default function Inventario({ usuarioActual }) {
           {visibles.map(p => {
             const bajo = p.activo && p.stock <= p.stock_min;
             return (
-              <tr key={p.id} style={{ borderBottom: '1px solid #eee', opacity: p.activo ? 1 : 0.5 }}>
+              <tr key={p.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: p.activo ? 1 : 0.5 }}>
                 <td>
                   {p.nombre}
-                  {p.codigo_barras && <><br /><small style={{ color: '#888' }}>{p.codigo_barras}</small></>}
+                  {p.codigo_barras && <><br /><small style={{ color: 'var(--texto-tenue)' }}>{p.codigo_barras}</small></>}
                 </td>
                 <td>{p.categoria || '—'}</td>
                 <td>{pesos(p.p_venta)}</td>
                 <td>{pesos(p.p_costo)}</td>
-                <td style={{ fontWeight: bajo ? 'bold' : 'normal', color: bajo ? 'darkred' : 'inherit' }}>
+                <td style={{ fontWeight: bajo ? 'bold' : 'normal', color: bajo ? 'var(--error)' : 'inherit' }}>
                   {p.stock}{bajo ? ' ⚠' : ''}
                 </td>
                 <td>{p.stock_min}</td>
@@ -174,7 +174,7 @@ export default function Inventario({ usuarioActual }) {
             );
           })}
           {visibles.length === 0 && (
-            <tr><td colSpan={8} style={{ paddingTop: 12, color: '#777' }}>
+            <tr><td colSpan={8} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
               {productos.length === 0 ? 'Todavía no hay productos.' : 'Ningún producto coincide con el filtro.'}
             </td></tr>
           )}

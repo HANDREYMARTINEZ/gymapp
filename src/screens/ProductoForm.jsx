@@ -59,7 +59,7 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 20, maxWidth: 420, marginTop: 20 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 20, maxWidth: 420, marginTop: 20 }}>
       <h3>{editando ? 'Editar producto' : 'Nuevo producto'}</h3>
 
       <input placeholder="Nombre *" value={form.nombre} onChange={e => cambiar('nombre', e.target.value)} style={{ width: '100%' }} />
@@ -75,13 +75,13 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
       <br /><input placeholder="Código de barras (opcional)" value={form.codigo_barras} onChange={e => cambiar('codigo_barras', e.target.value)} style={{ marginTop: 6, width: '100%' }} />
 
       {editando && (
-        <p style={{ color: '#666', fontSize: 13 }}>
+        <p style={{ color: 'var(--texto-suave)', fontSize: 13 }}>
           El stock no se edita aquí: se mueve desde <b>Ajustar stock</b>, para que
           cada cambio quede con su motivo.
         </p>
       )}
 
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
       <button onClick={guardar} disabled={guardando} style={{ marginTop: 8 }}>
         {guardando ? 'Guardando...' : 'Guardar'}

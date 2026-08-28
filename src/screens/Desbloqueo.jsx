@@ -46,7 +46,7 @@ export default function Desbloqueo({ onDesbloqueado }) {
       <br /><button onClick={intentar} disabled={verificando || bloqueado} style={{ marginTop: 10 }}>
         {verificando ? 'Verificando...' : bloqueado ? 'Espera ' + esperaSeg + 's' : 'Desbloquear'}
       </button>
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
     </div>
   );
 }

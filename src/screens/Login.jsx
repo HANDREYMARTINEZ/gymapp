@@ -28,7 +28,7 @@ export default function Login({ onLogin }) {
       <input placeholder="Usuario" value={usuario} onChange={e => setUsuario(e.target.value)} onKeyDown={tecla} />
       <br /><input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tecla} />
       <br /><button onClick={entrar} disabled={entrando}>{entrando ? 'Entrando...' : 'Entrar'}</button>
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
     </div>
   );
 }

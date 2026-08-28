@@ -78,7 +78,7 @@ function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
     if (enEfectivo) {
       const mov = caja.registrarMovimiento({
         tipo: 'ingreso',
-        concepto: 'Pago de membresia #' + membresiaId,
+        concepto: 'Pago de membresía #' + membresiaId,
         monto,
         usuarioId,
       });

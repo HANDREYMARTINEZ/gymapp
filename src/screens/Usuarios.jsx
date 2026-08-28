@@ -55,14 +55,14 @@ function UsuarioForm({ usuarioExistente, onGuardado, onCancelar }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 20, marginTop: 16, maxWidth: 440 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 20, marginTop: 16, maxWidth: 440 }}>
       <h3 style={{ marginTop: 0 }}>{editando ? 'Editar usuario' : 'Nuevo usuario'}</h3>
 
       <input placeholder="Nombre completo *" value={form.nombre}
              onChange={e => cambiar('nombre', e.target.value)} style={{ width: '100%' }} />
 
       {editando ? (
-        <p style={{ color: '#666', fontSize: 13 }}>
+        <p style={{ color: 'var(--texto-suave)', fontSize: 13 }}>
           Usuario: <b>{usuarioExistente.usuario}</b> — no se puede cambiar, porque es
           lo que ata a esta persona con su historial.
         </p>
@@ -71,7 +71,7 @@ function UsuarioForm({ usuarioExistente, onGuardado, onCancelar }) {
           <br /><input placeholder="Usuario para iniciar sesión *" value={form.usuario}
                        onChange={e => cambiar('usuario', e.target.value)}
                        style={{ marginTop: 6, width: '100%' }} />
-          <small style={{ color: '#666' }}>No distingue mayúsculas de minúsculas.</small>
+          <small style={{ color: 'var(--texto-suave)' }}>No distingue mayúsculas de minúsculas.</small>
           <br /><input type="password" placeholder="Contraseña *" value={form.password}
                        onChange={e => cambiar('password', e.target.value)} style={{ marginTop: 6 }} />
           <br /><input type="password" placeholder="Confirmar contraseña *" value={form.password2}
@@ -84,7 +84,7 @@ function UsuarioForm({ usuarioExistente, onGuardado, onCancelar }) {
         <option value="admin">Administrador — todo, incluidos Planes y Usuarios</option>
       </select>
 
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
       <br /><button onClick={guardar} disabled={guardando} style={{ marginTop: 8 }}>
         {guardando ? 'Guardando...' : 'Guardar'}
@@ -110,10 +110,10 @@ function CambiarPassword({ usuario, esUnoMismo, onListo, onCancelar }) {
   }
 
   return (
-    <div style={{ border: '1px solid #333', padding: 16, marginTop: 16, maxWidth: 440 }}>
+    <div style={{ border: '1px solid var(--borde-fuerte)', padding: 16, marginTop: 16, maxWidth: 440 }}>
       <h3 style={{ marginTop: 0 }}>Cambiar contraseña — {usuario.nombre}</h3>
       {esUnoMismo && (
-        <p style={{ color: '#555' }}>
+        <p style={{ color: 'var(--texto-suave)' }}>
           Es tu propia cuenta. Vas a seguir en sesión, pero la próxima vez que
           entres será con la nueva.
         </p>
@@ -123,7 +123,7 @@ function CambiarPassword({ usuario, esUnoMismo, onListo, onCancelar }) {
       <br /><input type="password" placeholder="Confirmar" value={password2}
                    onChange={e => { setPassword2(e.target.value); setError(''); }}
                    style={{ marginTop: 6 }} />
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
       <br /><button onClick={guardar} disabled={guardando} style={{ marginTop: 8 }}>
         {guardando ? 'Guardando...' : 'Cambiar contraseña'}
       </button>
@@ -168,7 +168,7 @@ export default function Usuarios({ usuarioActual }) {
       <h1>Usuarios</h1>
 
       {adminsActivos === 1 && (
-        <p style={{ color: '#666', maxWidth: 640 }}>
+        <p style={{ color: 'var(--texto-suave)', maxWidth: 640 }}>
           Hay un solo administrador activo. Mientras siga siendo el único, no se
           podrá desactivar ni bajar a asistente: dejaría la app sin nadie que
           pueda administrarla.
@@ -180,7 +180,7 @@ export default function Usuarios({ usuarioActual }) {
       )}
 
       {aviso && (
-        <p style={{ color: aviso.tipo === 'error' ? 'darkred' : 'darkgreen', maxWidth: 640 }}>
+        <p style={{ color: aviso.tipo === 'error' ? 'var(--error)' : 'var(--exito)', maxWidth: 640 }}>
           {aviso.texto}
         </p>
       )}
@@ -204,14 +204,14 @@ export default function Usuarios({ usuarioActual }) {
 
       <table style={{ marginTop: 20, borderCollapse: 'collapse', width: '100%', maxWidth: 860 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
             <th>Nombre</th><th>Usuario</th><th>Rol</th><th>Desde</th><th>Estado</th><th></th>
           </tr>
         </thead>
         <tbody>
           {usuarios.map(u => (
-            <tr key={u.id} style={{ borderBottom: '1px solid #eee', opacity: u.activo ? 1 : 0.5 }}>
-              <td>{u.nombre}{u.id === usuarioActual.id && <small style={{ color: '#888' }}> (tú)</small>}</td>
+            <tr key={u.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: u.activo ? 1 : 0.5 }}>
+              <td>{u.nombre}{u.id === usuarioActual.id && <small style={{ color: 'var(--texto-tenue)' }}> (tú)</small>}</td>
               <td>{u.usuario}</td>
               <td>{ROL_ETIQUETA[u.rol] || u.rol}</td>
               <td>{fecha(u.creado_en)}</td>

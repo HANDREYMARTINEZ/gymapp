@@ -181,7 +181,7 @@ function anular({ ventaId, usuarioId, motivo }) {
       productos.moverStock({
         productoId: item.producto_id,
         delta: item.cantidad,
-        motivo: 'anulacion de venta #' + ventaId,
+        motivo: 'anulación de venta #' + ventaId,
         usuarioId,
       });
     }
@@ -196,7 +196,7 @@ function anular({ ventaId, usuarioId, motivo }) {
     if (devuelveEfectivo) {
       const mov = caja.registrarMovimiento({
         tipo: 'egreso',
-        concepto: 'Anulacion de venta #' + ventaId,
+        concepto: 'Anulación de venta #' + ventaId,
         monto: venta.total,
         usuarioId,
       });

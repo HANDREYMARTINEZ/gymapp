@@ -1,0 +1,182 @@
+/* ===========================================================================
+   GymApp — paleta y estilos base
+   ---------------------------------------------------------------------------
+   Paleta de negro a azul rey. Los colores viven aqui como variables y NO se
+   escriben a mano en las pantallas: si un tono hay que ajustarlo, se cambia en
+   un sitio y no en 27.
+
+   Cada color semantico tiene dos variantes, y la diferencia importa:
+
+     --error        se lee SOBRE el fondo oscuro  -> es un tono claro
+     --error-solido se usa COMO fondo con letra clara encima -> es un tono oscuro
+
+   Usar uno donde va el otro deja texto ilegible. El kiosco pinta los estados
+   como texto; la ficha del cliente los pinta como etiqueta de fondo.
+   =========================================================================== */
+
+:root {
+  /* Superficies, de mas oscura a mas clara */
+  --fondo:            #070a14;
+  --superficie:       #0f1524;
+  --superficie-alta:  #17203a;
+  --nav-fondo:        #0a0f1e;
+
+  /* Bordes, de mas sutil a mas marcado */
+  --borde-suave:      #1c2740;
+  --borde:           #26334f;
+  --borde-fuerte:    #37476b;
+
+  /* Texto, de mas contraste a menos */
+  --texto:           #e6ebf7;
+  --texto-suave:     #a3b0cc;
+  --texto-tenue:     #7382a3;
+
+  /* Azul rey: lo interactivo y lo seleccionado */
+  --acento:          #3b5bdb;
+  --acento-claro:    #748ffc;
+  --acento-oscuro:   #2b4acb;
+  --sobre-acento:    #ffffff;
+
+  /* Semanticos */
+  --exito:           #51cf66;
+  --exito-solido:    #2f9e44;
+  --exito-fondo:     rgba(81, 207, 102, 0.10);
+
+  --error:           #ff8787;
+  --error-solido:    #c92a2a;
+  --error-fondo:     rgba(255, 135, 135, 0.10);
+
+  --aviso:           #ffd43b;
+  --aviso-solido:    #e8a90c;
+  --aviso-fondo:     rgba(255, 212, 59, 0.10);
+
+  --neutro:          #868e96;
+  --neutro-solido:   #495057;
+
+  /* Barras del dashboard: las de dias pasados, frente al azul de hoy */
+  --barra:           #2b3a5c;
+
+  --radio:           6px;
+  --sombra:          0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Base ---------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Sin esto el navegador usa una serif por defecto, que es de donde venia el
+     aire de formulario viejo que tenia la app. */
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--fondo);
+  color: var(--texto);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  color: var(--texto);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 { font-size: 26px; margin: 0 0 16px; }
+h2 { font-size: 19px; margin: 0 0 12px; }
+h3 { font-size: 16px; margin: 0 0 10px; }
+h4 { font-size: 14px; margin: 0 0 8px; }
+
+b, strong { font-weight: 600; }
+small { font-size: 12px; }
+
+/* --- Controles ----------------------------------------------------------- */
+
+button {
+  font: inherit;
+  padding: 7px 14px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--acento-oscuro);
+  border-color: var(--acento);
+}
+
+button:active:not(:disabled) { transform: translateY(1px); }
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El boton mas grande de una pantalla es el principal: en el POS es "Cobrar",
+   en el kiosco "Registrar". Se distingue por tamano, no por una clase, porque
+   las pantallas no usan clases. */
+button[style*="font-size: 16px"],
+button[style*="fontSize: 16"] {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 600;
+}
+
+input, select, textarea {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  margin-top: 2px;
+}
+
+input:focus, select:focus, textarea:focus, button:focus-visible {
+  outline: 2px solid var(--acento-claro);
+  outline-offset: 1px;
+}
+
+input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input::placeholder, textarea::placeholder { color: var(--texto-tenue); }
+
+/* Los selectores nativos se pintan claros si no se les dice el esquema. */
+select, input, textarea { color-scheme: dark; }
+
+textarea { min-height: 70px; resize: vertical; }
+
+input[type="checkbox"] { accent-color: var(--acento); }
+input[type="color"] { padding: 2px; height: 32px; width: 48px; }
+
+label { color: var(--texto-suave); }
+
+/* --- Tablas -------------------------------------------------------------- */
+
+table { color: var(--texto); }
+
+th {
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 6px 8px 6px 0;
+}
+
+td { padding: 8px 8px 8px 0; }
+
+tbody tr:hover { background: rgba(59, 91, 219, 0.06); }
+
+a { color: var(--acento-claro); }

@@ -31,7 +31,7 @@ export default function RegistrarPagoForm({ membresiaId, usuarioActual, onGuarda
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 16, marginTop: 12, borderRadius: 4 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 16, marginTop: 12, borderRadius: 4 }}>
       <h4>Registrar pago</h4>
       <input type="number" placeholder="Monto" value={monto}
              onChange={e => { setMonto(e.target.value); setError(''); }} />
@@ -41,7 +41,7 @@ export default function RegistrarPagoForm({ membresiaId, usuarioActual, onGuarda
       </select>
       <br /><input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} />
 
-      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 380 }}>{error}</p>}
 
       <br /><button onClick={guardar} disabled={guardando} style={{ marginTop: 8 }}>
         {guardando ? 'Guardando...' : 'Guardar pago'}

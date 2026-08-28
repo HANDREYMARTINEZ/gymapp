@@ -28,7 +28,7 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 16, marginTop: 12, borderRadius: 4 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 16, marginTop: 12, borderRadius: 4 }}>
       <h4>Vender membresía</h4>
       <select value={planId} onChange={e => { setPlanId(e.target.value); setError(''); }}>
         <option value="">-- Selecciona un plan --</option>
@@ -38,7 +38,7 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
       </select>
       <br />
       <label>Descuento %: <input type="number" min="0" max="100" value={descuento} onChange={e => setDescuento(e.target.value)} style={{ width: 60 }} /></label>
-      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 380 }}>{error}</p>}
       <button onClick={vender} disabled={guardando} style={{ marginTop: 8 }}>{guardando ? 'Vendiendo...' : 'Vender'}</button>
       <button onClick={onCancelar} disabled={guardando} style={{ marginLeft: 8 }}>Cancelar</button>
     </div>

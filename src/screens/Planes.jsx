@@ -47,7 +47,7 @@ export default function Planes() {
           <button onClick={() => setModo('nuevo')}>+ Nuevo plan</button>
 
           {porDesactivar && (
-            <div style={{ border: '2px solid darkred', padding: 16, marginTop: 16, maxWidth: 480 }}>
+            <div style={{ border: '2px solid var(--error)', padding: 16, marginTop: 16, maxWidth: 480 }}>
               <p style={{ marginTop: 0 }}>
                 ¿Desactivar <b>{porDesactivar.nombre}</b>? Dejará de aparecer al vender una
                 membresía nueva. Las membresías ya vendidas con este plan siguen igual, y
@@ -59,14 +59,14 @@ export default function Planes() {
           )}
           <table style={{ marginTop: 20, borderCollapse: 'collapse', width: '100%' }}>
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+              <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
                 <th>Nombre</th><th>Tipo</th><th>Precio</th><th>Detalle</th><th>Estado</th><th></th>
               </tr>
             </thead>
             <tbody>
               {planes.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #eee', opacity: p.activo ? 1 : 0.5 }}>
-                  <td style={{ borderLeft: `4px solid ${p.color || '#ccc'}`, paddingLeft: 8 }}>{p.nombre}</td>
+                <tr key={p.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: p.activo ? 1 : 0.5 }}>
+                  <td style={{ borderLeft: `4px solid ${p.color || 'var(--borde)'}`, paddingLeft: 8 }}>{p.nombre}</td>
                   <td>{p.tipo}</td>
                   <td>${p.precio.toLocaleString('es-CO')}</td>
                   <td>{p.tipo === 'periodo' ? `${p.dias_duracion} días` : `${p.num_tickets} tickets${p.dias_vigencia ? ` / ${p.dias_vigencia} días` : ''}`}</td>

@@ -46,7 +46,7 @@ export default function Clientes({ usuarioActual }) {
 
           <ul style={{ listStyle: 'none', padding: 0, marginTop: 20 }}>
             {resultados.map(c => (
-              <li key={c.id} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => abrirFicha(c.id)}>
+              <li key={c.id} style={{ padding: 8, borderBottom: '1px solid var(--borde-suave)', cursor: 'pointer' }} onClick={() => abrirFicha(c.id)}>
                 <b>{c.nombre}</b> — {c.documento || 'sin documento'} — {c.telefono || 'sin teléfono'}
               </li>
             ))}

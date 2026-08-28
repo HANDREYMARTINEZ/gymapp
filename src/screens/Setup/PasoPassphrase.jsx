@@ -24,7 +24,7 @@ export default function PasoPassphrase({ onFinalizar }) {
   return (
     <div>
       <h1>Passphrase de cifrado</h1>
-      <p style={{ color: 'darkred', maxWidth: 400 }}>
+      <p style={{ color: 'var(--error)', maxWidth: 400 }}>
         Esta clave protege los datos biométricos y los respaldos. Es <b>distinta</b> de tu
         contraseña de administrador: esta se pide al arrancar la app, y es la única que abre
         los archivos de respaldo.
@@ -37,7 +37,7 @@ export default function PasoPassphrase({ onFinalizar }) {
       <br /><input type="password" placeholder="Confirmar passphrase" value={confirmar}
                    onChange={e => { setConfirmar(e.target.value); setError(''); }} />
 
-      {error && <p style={{ color: 'darkred', maxWidth: 400 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 400 }}>{error}</p>}
 
       <br /><button onClick={finalizar} disabled={guardando}>{guardando ? 'Finalizando...' : 'Finalizar configuración'}</button>
     </div>

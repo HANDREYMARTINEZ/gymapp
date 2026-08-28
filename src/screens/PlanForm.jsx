@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
   const [form, setForm] = useState({
     nombre: '', tipo: 'periodo', precio: '',
-    dias_duracion: '', num_tickets: '', dias_vigencia: '', color: '#4fc3f7',
+    dias_duracion: '', num_tickets: '', dias_vigencia: '', color: '#3b5bdb',
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
         dias_duracion: planExistente.dias_duracion || '',
         num_tickets: planExistente.num_tickets || '',
         dias_vigencia: planExistente.dias_vigencia || '',
-        color: planExistente.color || '#4fc3f7',
+        color: planExistente.color || '#3b5bdb',
       });
     }
   }, [planExistente]);
@@ -62,7 +62,7 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 20, maxWidth: 400, marginTop: 20 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 20, maxWidth: 400, marginTop: 20 }}>
       <h3>{planExistente ? 'Editar plan' : 'Nuevo plan'}</h3>
       <input placeholder="Nombre *" value={form.nombre} onChange={e => cambiar('nombre', e.target.value)} />
       <br />
@@ -84,7 +84,7 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
       )}
 
       <br /><input type="color" value={form.color} onChange={e => cambiar('color', e.target.value)} />
-      {error && <p style={{ color: 'darkred', maxWidth: 380 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 380 }}>{error}</p>}
 
       <br /><button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
       <button onClick={onCancelar} disabled={guardando} style={{ marginLeft: 8 }}>Cancelar</button>

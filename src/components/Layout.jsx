@@ -15,7 +15,7 @@ export default function Layout({ usuarioActual, pantallaActiva, onSeleccionar, o
 
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
-      <nav style={{ width: 200, background: '#1e1e1e', color: 'white', padding: 20 }}>
+      <nav style={{ width: 200, background: 'var(--nav-fondo)', color: 'var(--texto)', padding: 20 }}>
         <p><b>{usuarioActual.nombre}</b><br /><small>{usuarioActual.rol}</small></p>
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {opcionesVisibles.map(o => (
@@ -26,7 +26,7 @@ export default function Layout({ usuarioActual, pantallaActiva, onSeleccionar, o
                 padding: '8px 0',
                 cursor: 'pointer',
                 fontWeight: pantallaActiva === o.id ? 'bold' : 'normal',
-                color: pantallaActiva === o.id ? '#4fc3f7' : 'white',
+                color: pantallaActiva === o.id ? 'var(--acento-claro)' : 'var(--texto-suave)',
               }}
             >
               {o.label}

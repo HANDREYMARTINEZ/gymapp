@@ -15,10 +15,10 @@ function soloHora(iso) {
 }
 
 function Diferencia({ valor }) {
-  if (valor === 0) return <b style={{ color: 'darkgreen' }}>Cuadró exacto</b>;
+  if (valor === 0) return <b style={{ color: 'var(--exito)' }}>Cuadró exacto</b>;
   const falta = valor < 0;
   return (
-    <b style={{ color: 'darkred' }}>
+    <b style={{ color: 'var(--error)' }}>
       {falta ? 'Faltan ' : 'Sobran '}{pesos(Math.abs(valor))}
     </b>
   );
@@ -50,15 +50,15 @@ function AbrirCaja({ usuarioActual, onAbierta }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 20, maxWidth: 420 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 20, maxWidth: 420 }}>
       <h3 style={{ marginTop: 0 }}>Abrir caja</h3>
-      <p style={{ color: '#555' }}>
+      <p style={{ color: 'var(--texto-suave)' }}>
         La base inicial es el efectivo con el que arranca el cajón. Al cerrar se
         compara contra lo que cuentes.
       </p>
       <input type="number" placeholder="Base inicial" value={base}
              onChange={e => { setBase(e.target.value); setError(''); }} />
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
       <br /><button onClick={abrir} disabled={abriendo} style={{ marginTop: 8 }}>
         {abriendo ? 'Abriendo...' : 'Abrir caja'}
       </button>
@@ -89,7 +89,7 @@ function NuevoMovimiento({ usuarioActual, onListo }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: 16, marginTop: 20, maxWidth: 560 }}>
+    <div style={{ border: '1px solid var(--borde)', padding: 16, marginTop: 20, maxWidth: 560 }}>
       <h3 style={{ marginTop: 0 }}>Registrar movimiento de efectivo</h3>
       <select value={tipo} onChange={e => { setTipo(e.target.value); setError(''); }}>
         <option value="ingreso">Ingreso (entra al cajón)</option>
@@ -104,7 +104,7 @@ function NuevoMovimiento({ usuarioActual, onListo }) {
       <button onClick={registrar} disabled={guardando} style={{ marginLeft: 8 }}>
         {guardando ? '...' : 'Registrar'}
       </button>
-      {error && <p style={{ color: 'darkred', marginBottom: 0 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', marginBottom: 0 }}>{error}</p>}
     </div>
   );
 }
@@ -131,7 +131,7 @@ function CerrarCaja({ esperado, onCerrada, onCancelar }) {
   }
 
   return (
-    <div style={{ border: '2px solid #333', padding: 16, marginTop: 20, maxWidth: 560 }}>
+    <div style={{ border: '2px solid var(--borde-fuerte)', padding: 16, marginTop: 20, maxWidth: 560 }}>
       <h3 style={{ marginTop: 0 }}>Cerrar caja</h3>
       <p>Según los movimientos, en el cajón debería haber <b>{pesos(esperado)}</b>.</p>
 
@@ -145,7 +145,7 @@ function CerrarCaja({ esperado, onCerrada, onCancelar }) {
                    onChange={e => setNota(e.target.value)}
                    style={{ marginTop: 8, width: '100%' }} />
 
-      {error && <p style={{ color: 'darkred' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
       <button onClick={cerrar} disabled={cerrando} style={{ marginTop: 8 }}>
         {cerrando ? 'Cerrando...' : 'Cerrar caja'}
@@ -178,7 +178,7 @@ export default function Caja({ usuarioActual }) {
       <h1>Caja</h1>
 
       {ultimoCierre && (
-        <div style={{ border: '1px solid darkgreen', padding: 12, marginBottom: 20, maxWidth: 560 }}>
+        <div style={{ border: '1px solid var(--exito)', padding: 12, marginBottom: 20, maxWidth: 560 }}>
           Caja cerrada. Esperado {pesos(ultimoCierre.esperado)}, contado{' '}
           {pesos(ultimoCierre.efectivoContado)}. <Diferencia valor={ultimoCierre.diferencia} />
         </div>
@@ -188,7 +188,7 @@ export default function Caja({ usuarioActual }) {
 
       {sesion && resumen && (
         <>
-          <div style={{ border: '1px solid #333', padding: 16, maxWidth: 560 }}>
+          <div style={{ border: '1px solid var(--borde-fuerte)', padding: 16, maxWidth: 560 }}>
             <p style={{ marginTop: 0 }}>
               Abierta por <b>{sesion.usuario_nombre}</b> el {fechaHora(sesion.abierta_en)}
             </p>
@@ -197,7 +197,7 @@ export default function Caja({ usuarioActual }) {
                 <tr><td>Base inicial</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>{pesos(sesion.base_inicial)}</td></tr>
                 <tr><td>Ingresos</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>+ {pesos(resumen.ingresos)}</td></tr>
                 <tr><td>Egresos</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>− {pesos(resumen.egresos)}</td></tr>
-                <tr style={{ borderTop: '1px solid #333' }}>
+                <tr style={{ borderTop: '1px solid var(--borde-fuerte)' }}>
                   <td><b>Debería haber</b></td>
                   <td style={{ textAlign: 'right', paddingLeft: 20 }}><b>{pesos(resumen.esperado)}</b></td>
                 </tr>
@@ -217,23 +217,23 @@ export default function Caja({ usuarioActual }) {
           <h2 style={{ marginTop: 30 }}>Movimientos de esta caja</h2>
           <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 720 }}>
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+              <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
                 <th>Hora</th><th>Concepto</th><th>Quién</th><th style={{ textAlign: 'right' }}>Monto</th>
               </tr>
             </thead>
             <tbody>
               {resumen.movimientos.map(m => (
-                <tr key={m.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={m.id} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
                   <td>{soloHora(m.fecha)}</td>
                   <td>{m.concepto}</td>
                   <td>{m.usuario_nombre || '—'}</td>
-                  <td style={{ textAlign: 'right', color: m.tipo === 'egreso' ? 'darkred' : 'darkgreen' }}>
+                  <td style={{ textAlign: 'right', color: m.tipo === 'egreso' ? 'var(--error)' : 'var(--exito)' }}>
                     {m.tipo === 'egreso' ? '− ' : '+ '}{pesos(m.monto)}
                   </td>
                 </tr>
               ))}
               {resumen.movimientos.length === 0 && (
-                <tr><td colSpan={4} style={{ paddingTop: 12, color: '#777' }}>
+                <tr><td colSpan={4} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
                   Todavía no hay movimientos en esta caja.
                 </td></tr>
               )}
@@ -245,7 +245,7 @@ export default function Caja({ usuarioActual }) {
       <h2 style={{ marginTop: 30 }}>Cajas anteriores</h2>
       <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 860 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
             <th>Abierta</th><th>Cerrada</th><th>Quién</th>
             <th style={{ textAlign: 'right' }}>Base</th>
             <th style={{ textAlign: 'right' }}>Contado</th>
@@ -254,17 +254,17 @@ export default function Caja({ usuarioActual }) {
         </thead>
         <tbody>
           {historial.filter(s => s.cerrada_en).map(s => (
-            <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}>
+            <tr key={s.id} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
               <td>{fechaHora(s.abierta_en)}</td>
               <td>{fechaHora(s.cerrada_en)}</td>
               <td>{s.usuario_nombre}</td>
               <td style={{ textAlign: 'right' }}>{pesos(s.base_inicial)}</td>
               <td style={{ textAlign: 'right' }}>{pesos(s.efectivo_contado)}</td>
-              <td><Diferencia valor={s.diferencia} />{s.nota ? <><br /><small style={{ color: '#888' }}>{s.nota}</small></> : null}</td>
+              <td><Diferencia valor={s.diferencia} />{s.nota ? <><br /><small style={{ color: 'var(--texto-tenue)' }}>{s.nota}</small></> : null}</td>
             </tr>
           ))}
           {historial.filter(s => s.cerrada_en).length === 0 && (
-            <tr><td colSpan={6} style={{ paddingTop: 12, color: '#777' }}>Todavía no se ha cerrado ninguna caja.</td></tr>
+            <tr><td colSpan={6} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>Todavía no se ha cerrado ninguna caja.</td></tr>
           )}
         </tbody>
       </table>

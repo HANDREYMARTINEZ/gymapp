@@ -44,11 +44,11 @@ export default function PasoAdmin({ onSiguiente }) {
       <h1>Crear usuario administrador</h1>
       <input placeholder="Tu nombre completo" value={form.nombre} onChange={e => cambiar('nombre', e.target.value)} />
       <br /><input placeholder="Usuario (para iniciar sesión)" value={form.usuario} onChange={e => cambiar('usuario', e.target.value)} />
-      <br /><small style={{ color: '#666' }}>No distingue mayúsculas de minúsculas.</small>
+      <br /><small style={{ color: 'var(--texto-suave)' }}>No distingue mayúsculas de minúsculas.</small>
       <br /><input type="password" placeholder="Contraseña" value={form.password} onChange={e => cambiar('password', e.target.value)} />
       <br /><input type="password" placeholder="Confirmar contraseña" value={form.password2} onChange={e => cambiar('password2', e.target.value)} />
 
-      {error && <p style={{ color: 'darkred', maxWidth: 340 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error)', maxWidth: 340 }}>{error}</p>}
 
       <br /><button onClick={continuar} disabled={guardando}>{guardando ? 'Guardando...' : 'Siguiente'}</button>
     </div>

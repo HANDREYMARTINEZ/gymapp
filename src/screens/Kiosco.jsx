@@ -1,14 +1,14 @@
 import { useState, useRef } from 'react';
 
 const MENSAJES = {
-  no_registrado: { color: '#c62828', texto: 'No registrado' },
-  pin_incorrecto: { color: '#c62828', texto: 'PIN incorrecto. Intenta de nuevo o acércate a recepción' },
-  ya_registrado_hoy: { color: '#616161', texto: 'Ya registraste tu asistencia hoy' },
-  sin_membresia: { color: '#c62828', texto: 'Sin membresía — pasa a recepción' },
-  pausada: { color: '#c62828', texto: 'Membresía pausada — pasa a recepción' },
-  saldo_pendiente: { color: '#c62828', texto: 'Saldo pendiente — pasa a recepción' },
-  vencida: { color: '#c62828', texto: 'Tu membresía venció — pasa a recepción' },
-  agotada: { color: '#c62828', texto: 'Tickets agotados — pasa a recepción' },
+  no_registrado: { color: 'var(--error)', texto: 'No registrado' },
+  pin_incorrecto: { color: 'var(--error)', texto: 'PIN incorrecto. Intenta de nuevo o acércate a recepción' },
+  ya_registrado_hoy: { color: 'var(--neutro)', texto: 'Ya registraste tu asistencia hoy' },
+  sin_membresia: { color: 'var(--error)', texto: 'Sin membresía — pasa a recepción' },
+  pausada: { color: 'var(--error)', texto: 'Membresía pausada — pasa a recepción' },
+  saldo_pendiente: { color: 'var(--error)', texto: 'Saldo pendiente — pasa a recepción' },
+  vencida: { color: 'var(--error)', texto: 'Tu membresía venció — pasa a recepción' },
+  agotada: { color: 'var(--error)', texto: 'Tickets agotados — pasa a recepción' },
 };
 
 export default function Kiosco() {
@@ -54,15 +54,15 @@ export default function Kiosco() {
     if (resultado.ok) {
       const esPorVencer = resultado.estado === 'por_vencer';
       bloque = (
-        <div style={{ background: esPorVencer ? '#f9a825' : '#2e7d32', color: 'white', padding: 40, borderRadius: 8, textAlign: 'center', fontSize: 28 }}>
+        <div style={{ background: esPorVencer ? 'var(--aviso-solido)' : 'var(--exito-solido)', color: 'var(--texto)', padding: 40, borderRadius: 8, textAlign: 'center', fontSize: 28 }}>
           ✔ Bienvenido, {resultado.nombre}
           {esPorVencer && <div style={{ fontSize: 16, marginTop: 8 }}>Tu membresía está por vencer</div>}
         </div>
       );
     } else {
-      const info = MENSAJES[resultado.motivo] || { color: '#c62828', texto: 'No se pudo registrar' };
+      const info = MENSAJES[resultado.motivo] || { color: 'var(--error)', texto: 'No se pudo registrar' };
       bloque = (
-        <div style={{ background: info.color, color: 'white', padding: 40, borderRadius: 8, textAlign: 'center', fontSize: 24 }}>
+        <div style={{ background: info.color, color: 'var(--texto)', padding: 40, borderRadius: 8, textAlign: 'center', fontSize: 24 }}>
           {resultado.motivo === 'ya_registrado_hoy' ? '' : '✖ '}{resultado.nombre ? `${resultado.nombre} — ` : ''}{info.texto}
         </div>
       );
@@ -101,7 +101,7 @@ export default function Kiosco() {
             onKeyDown={tecla}
             style={{ fontSize: 24, width: '100%', textAlign: 'center', padding: 10, marginTop: 10 }}
           />
-          {errorCampos && <p style={{ color: '#c62828', marginTop: 8 }}>{errorCampos}</p>}
+          {errorCampos && <p style={{ color: 'var(--error)', marginTop: 8 }}>{errorCampos}</p>}
           <button onClick={marcar} disabled={enviando} style={{ fontSize: 20, width: '100%', padding: 14, marginTop: 16 }}>
             {enviando ? 'Verificando...' : 'Marcar asistencia'}
           </button>

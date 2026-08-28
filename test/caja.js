@@ -73,6 +73,10 @@ app.whenReady().then(async () => {
     check('egreso registrado', repo.registrarMovimiento({ tipo: 'egreso', concepto: 'Domicilio agua', monto: 1500, usuarioId }).ok);
 
     const r = repo.resumen(ap.id);
+    // El dashboard pinta "Abierta por <nombre>" desde el resumen, no desde
+    // sesionAbierta(). Cuando resumen() hacia un SELECT * sin JOIN salia vacio.
+    check('el resumen trae la sesion con el nombre del usuario',
+          r.sesion.usuario_nombre === 'Cajero', 'leyo: ' + r.sesion.usuario_nombre);
     check('suma los ingresos', r.ingresos === 5500, 'ingresos=' + r.ingresos);
     check('suma los egresos', r.egresos === 1500, 'egresos=' + r.egresos);
     check('esperado = base + ingresos - egresos', r.esperado === 54000, 'esperado=' + r.esperado);

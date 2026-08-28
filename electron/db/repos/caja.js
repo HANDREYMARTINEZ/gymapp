@@ -73,7 +73,13 @@ function listarMovimientos(sesionId) {
 // Lo que deberia haber en el cajon si nadie se equivoco.
 function resumen(sesionId) {
   const db = getDb();
-  const sesion = db.prepare(`SELECT * FROM caja_sesiones WHERE id = ?`).get(sesionId);
+  // Con el JOIN, no con un SELECT * : quien consuma el resumen espera el mismo
+  // objeto de sesion que devuelve sesionAbierta(), nombre del usuario incluido.
+  const sesion = db.prepare(`
+    SELECT s.*, u.nombre AS usuario_nombre
+    FROM caja_sesiones s JOIN usuarios u ON u.id = s.usuario_id
+    WHERE s.id = ?
+  `).get(sesionId);
   if (!sesion) return null;
 
   const totales = db.prepare(`

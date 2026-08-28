@@ -102,12 +102,12 @@ export default function Configuracion() {
         <button onClick={guardarDatos} disabled={guardando} style={{ marginTop: 8 }}>
           {guardando ? 'Guardando...' : 'Guardar datos'}
         </button>
-        {avisoDatos && <span style={{ marginLeft: 10, color: 'darkgreen' }}>{avisoDatos}</span>}
+        {avisoDatos && <span style={{ marginLeft: 10, color: 'var(--exito)' }}>{avisoDatos}</span>}
       </section>
 
       <section>
         <h2>Respaldos</h2>
-        <p style={{ maxWidth: 620, color: '#555' }}>
+        <p style={{ maxWidth: 620, color: 'var(--texto-suave)' }}>
           Cada respaldo es una copia cifrada de toda la base, y solo se abre con la
           passphrase de esta instalación. Se genera uno automáticamente al cerrar la
           app y se conservan los 14 más recientes.
@@ -118,13 +118,13 @@ export default function Configuracion() {
         </button>
 
         {avisoRespaldo && (
-          <p style={{ color: avisoRespaldo.tipo === 'ok' ? 'darkgreen' : 'darkred', wordBreak: 'break-all' }}>
+          <p style={{ color: avisoRespaldo.tipo === 'ok' ? 'var(--exito)' : 'var(--error)', wordBreak: 'break-all' }}>
             {avisoRespaldo.texto}
           </p>
         )}
 
         {porRestaurar && (
-          <div style={{ marginTop: 16, padding: 16, border: '2px solid darkred', maxWidth: 620 }}>
+          <div style={{ marginTop: 16, padding: 16, border: '2px solid var(--error)', maxWidth: 620 }}>
             <p style={{ marginTop: 0 }}>
               <b>Restaurar {porRestaurar.nombre}</b>
             </p>
@@ -144,13 +144,13 @@ export default function Configuracion() {
 
         <table style={{ marginTop: 20, borderCollapse: 'collapse', width: '100%', maxWidth: 720 }}>
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+            <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
               <th>Fecha</th><th>Tamaño</th><th></th>
             </tr>
           </thead>
           <tbody>
             {respaldos.map(r => (
-              <tr key={r.ruta} style={{ borderBottom: '1px solid #eee' }}>
+              <tr key={r.ruta} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
                 <td>{formatearFecha(r.fecha)}</td>
                 <td>{formatearTamano(r.tamanoBytes)}</td>
                 <td>
@@ -161,7 +161,7 @@ export default function Configuracion() {
               </tr>
             ))}
             {respaldos.length === 0 && (
-              <tr><td colSpan={3} style={{ paddingTop: 12, color: '#777' }}>Todavía no hay respaldos.</td></tr>
+              <tr><td colSpan={3} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>Todavía no hay respaldos.</td></tr>
             )}
           </tbody>
         </table>

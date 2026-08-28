@@ -119,14 +119,14 @@ export default function POS({ usuarioActual }) {
       <h1>POS</h1>
 
       {!cajaAbierta && (
-        <p style={{ border: '1px solid #b8860b', background: '#fffbe6', padding: 10, maxWidth: 720 }}>
+        <p style={{ border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)', padding: 10, maxWidth: 720 }}>
           No hay caja abierta. Puedes cobrar con tarjeta o transferencia, pero no
           en efectivo: ábrela desde <b>Caja</b>.
         </p>
       )}
 
       {ultimaVenta && (
-        <p style={{ border: '1px solid darkgreen', background: '#f2fff2', padding: 10, maxWidth: 720 }}>
+        <p style={{ border: '1px solid var(--exito)', background: 'var(--exito-fondo)', padding: 10, maxWidth: 720 }}>
           Venta <b>#{ultimaVenta.ventaId}</b> registrada por <b>{pesos(ultimaVenta.total)}</b> en {ultimaVenta.metodoPago}.
         </p>
       )}
@@ -142,24 +142,24 @@ export default function POS({ usuarioActual }) {
 
           <table style={{ marginTop: 12, borderCollapse: 'collapse', width: '100%' }}>
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
+              <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
                 <th>Producto</th><th style={{ textAlign: 'right' }}>Precio</th>
                 <th style={{ textAlign: 'right' }}>Stock</th><th></th>
               </tr>
             </thead>
             <tbody>
               {visibles.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={p.id} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
                   <td>{p.nombre}</td>
                   <td style={{ textAlign: 'right' }}>{pesos(p.p_venta)}</td>
-                  <td style={{ textAlign: 'right', color: p.stock <= 0 ? 'darkred' : 'inherit' }}>{p.stock}</td>
+                  <td style={{ textAlign: 'right', color: p.stock <= 0 ? 'var(--error)' : 'inherit' }}>{p.stock}</td>
                   <td style={{ textAlign: 'right' }}>
                     <button onClick={() => agregar(p)} disabled={p.stock <= 0}>Agregar</button>
                   </td>
                 </tr>
               ))}
               {visibles.length === 0 && (
-                <tr><td colSpan={4} style={{ paddingTop: 12, color: '#777' }}>
+                <tr><td colSpan={4} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
                   {productos.length === 0 ? 'No hay productos activos. Créalos en Inventario.' : 'Nada coincide.'}
                 </td></tr>
               )}
@@ -167,16 +167,16 @@ export default function POS({ usuarioActual }) {
           </table>
         </div>
 
-        <div style={{ width: 380, border: '1px solid #333', padding: 16 }}>
+        <div style={{ width: 380, border: '1px solid var(--borde-fuerte)', padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Venta actual</h3>
 
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               {carrito.map(l => (
-                <tr key={l.productoId} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={l.productoId} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
                   <td>
                     {l.nombre}
-                    <br /><small style={{ color: '#888' }}>{pesos(l.pUnitario)} c/u</small>
+                    <br /><small style={{ color: 'var(--texto-tenue)' }}>{pesos(l.pUnitario)} c/u</small>
                   </td>
                   <td style={{ width: 70 }}>
                     <input type="number" value={l.cantidad} min={0}
@@ -190,7 +190,7 @@ export default function POS({ usuarioActual }) {
                 </tr>
               ))}
               {carrito.length === 0 && (
-                <tr><td style={{ color: '#777', paddingBottom: 8 }}>Sin productos todavía.</td></tr>
+                <tr><td style={{ color: 'var(--texto-tenue)', paddingBottom: 8 }}>Sin productos todavía.</td></tr>
               )}
             </tbody>
           </table>
@@ -202,14 +202,14 @@ export default function POS({ usuarioActual }) {
             {medios.map(m => <option key={m}>{m}</option>)}
           </select>
 
-          {error && <p style={{ color: 'darkred' }}>{error}</p>}
+          {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
           <button onClick={cobrar} disabled={cobrando || carrito.length === 0 || necesitaCaja}
                   style={{ marginTop: 10, width: '100%', padding: 10, fontSize: 16 }}>
             {cobrando ? 'Cobrando...' : 'Cobrar ' + pesos(total)}
           </button>
           {necesitaCaja && (
-            <small style={{ color: 'darkred' }}>Abre la caja para cobrar en efectivo.</small>
+            <small style={{ color: 'var(--error)' }}>Abre la caja para cobrar en efectivo.</small>
           )}
           {carrito.length > 0 && (
             <button onClick={() => { setCarrito([]); setError(''); }} style={{ marginTop: 6, width: '100%' }}>
