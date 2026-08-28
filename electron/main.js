@@ -10,6 +10,7 @@ require('./ipc/planes');
 require('./ipc/productos');
 require('./ipc/caja');
 require('./ipc/ventas');
+require('./ipc/dashboard');
 require('./ipc/membresias');
 require('./ipc/pausas');
 require('./ipc/asistencias');

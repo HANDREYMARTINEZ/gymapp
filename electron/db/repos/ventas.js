@@ -134,25 +134,31 @@ function obtener(ventaId) {
   return venta;
 }
 
-function listarDelDia(fecha) {
+// ventas.fecha se guarda con toISOString(), que es UTC. Comparar con date() a
+// secas agrupaba por dia UTC: en Colombia (UTC-5) una venta de las 7 de la noche
+// cae a la 1 UTC del dia siguiente y se contaba como del dia siguiente --
+// justo las ventas de la tarde, que son las que se revisan al cerrar.
+// El modificador 'localtime' agrupa por el dia que vio el cajero.
+// Ambas reciben una fecha local 'YYYY-MM-DD', no un timestamp.
+function listarDelDia(fechaLocal) {
   return getDb().prepare(`
     SELECT v.*, u.nombre AS usuario_nombre, c.nombre AS cliente_nombre
     FROM ventas v
     LEFT JOIN usuarios u ON u.id = v.usuario_id
     LEFT JOIN clientes c ON c.id = v.cliente_id
-    WHERE date(v.fecha) = date(?)
+    WHERE date(v.fecha, 'localtime') = ?
     ORDER BY v.fecha DESC, v.id DESC
-  `).all(fecha);
+  `).all(fechaLocal);
 }
 
-function totalesDelDia(fecha) {
+function totalesDelDia(fechaLocal) {
   return getDb().prepare(`
     SELECT
       COUNT(*) AS numVentas,
       COALESCE(SUM(total), 0) AS total
     FROM ventas
-    WHERE date(fecha) = date(?) AND anulada = 0
-  `).get(fecha);
+    WHERE date(fecha, 'localtime') = ? AND anulada = 0
+  `).get(fechaLocal);
 }
 
 // Anular devuelve el stock y, si la venta fue en efectivo, saca el dinero del

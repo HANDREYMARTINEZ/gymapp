@@ -86,6 +86,12 @@ ventas: {
   mediosPago: () => ipcRenderer.invoke('ventas:mediosPago'),
 },
 
+dashboard: {
+  resumen: (opciones) => ipcRenderer.invoke('dashboard:resumen', opciones),
+  ingresosDelDia: (fecha) => ipcRenderer.invoke('dashboard:ingresosDelDia', fecha),
+  porVencer: (diasAviso) => ipcRenderer.invoke('dashboard:porVencer', diasAviso),
+},
+
 membresias: {
   vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),

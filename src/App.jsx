@@ -14,9 +14,10 @@ import Inventario from './screens/Inventario';
 import Caja from './screens/Caja';
 import POS from './screens/POS';
 import Usuarios from './screens/Usuarios';
+import Dashboards from './screens/Dashboards';
 
 
-const CONSTRUIDAS = ['clientes', 'planes', 'kiosco', 'pos', 'inventario', 'caja', 'usuarios', 'configuracion'];
+const CONSTRUIDAS = ['clientes', 'planes', 'kiosco', 'pos', 'inventario', 'caja', 'dashboards', 'usuarios', 'configuracion'];
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
@@ -68,6 +69,7 @@ export default function App() {
       {pantallaActiva === 'pos' && <POS usuarioActual={usuarioActual} />}
       {pantallaActiva === 'inventario' && <Inventario usuarioActual={usuarioActual} />}
       {pantallaActiva === 'caja' && <Caja usuarioActual={usuarioActual} />}
+      {pantallaActiva === 'dashboards' && <Dashboards />}
       {pantallaActiva === 'usuarios' && <Usuarios usuarioActual={usuarioActual} />}
       {pantallaActiva === 'configuracion' && <Configuracion />}
       {!CONSTRUIDAS.includes(pantallaActiva) && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}

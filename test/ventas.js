@@ -145,11 +145,32 @@ app.whenReady().then(async () => {
           ventas.anular({ ventaId: v.ventaId, usuarioId }).motivo === 'ya_anulada');
 
     // --- totales del dia excluyen anuladas ---
-    const hoy = new Date().toISOString();
+    const hoy = require('date-fns').format(new Date(), 'yyyy-MM-dd');
     const tot = ventas.totalesDelDia(hoy);
     check('los totales del dia excluyen la anulada', tot.total === 3000, 'total=' + tot.total);
     check('listarDelDia si muestra la anulada',
           ventas.listarDelDia(hoy).some(x => x.id === v.ventaId && x.anulada === 1));
+
+    // --- el dia es el del cajero, no el de UTC ---
+    // Se inserta a mano una venta a las 19:30 hora local. Guardada en UTC cae al
+    // dia siguiente en varios husos, y agrupar por date() a secas la sacaba del
+    // dia en que de verdad se hizo.
+    const nocheLocal = new Date();
+    nocheLocal.setHours(19, 30, 0, 0);
+    const fechaLocalNoche = require('date-fns').format(nocheLocal, 'yyyy-MM-dd');
+    db.prepare(`
+      INSERT INTO ventas (fecha, total, metodo_pago, usuario_id, cliente_id, anulada)
+      VALUES (?, 7777, 'Tarjeta', ?, NULL, 0)
+    `).run(nocheLocal.toISOString(), usuarioId);
+
+    const utcDistinto = nocheLocal.toISOString().slice(0, 10) !== fechaLocalNoche;
+    log('    (la fecha UTC de esa venta ' + (utcDistinto ? 'SI' : 'no') + ' difiere de la local en este huso)');
+
+    check('una venta de las 19:30 cuenta en el dia local del cajero',
+          ventas.listarDelDia(fechaLocalNoche).some(x => x.total === 7777),
+          'local=' + fechaLocalNoche + ' utc=' + nocheLocal.toISOString().slice(0, 10));
+    check('y suma en los totales de ese dia local',
+          ventas.totalesDelDia(fechaLocalNoche).total >= 7777);
 
     // --- pago de membresia en efectivo entra al arqueo ---
     db.prepare(`INSERT INTO clientes (nombre, f_registro, activo) VALUES ('Cliente', ?, 1)`)
