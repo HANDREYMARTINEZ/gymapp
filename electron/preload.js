@@ -43,6 +43,20 @@ planes: {
   listarTodos: () => ipcRenderer.invoke('planes:listarTodos'), 
 },
 
+productos: {
+  crear: (producto) => ipcRenderer.invoke('productos:crear', producto),
+  listar: () => ipcRenderer.invoke('productos:listar'),
+  listarTodos: () => ipcRenderer.invoke('productos:listarTodos'),
+  obtener: (id) => ipcRenderer.invoke('productos:obtener', id),
+  obtenerPorCodigo: (codigo) => ipcRenderer.invoke('productos:obtenerPorCodigo', codigo),
+  editar: (id, cambios) => ipcRenderer.invoke('productos:editar', id, cambios),
+  desactivar: (id) => ipcRenderer.invoke('productos:desactivar', id),
+  activar: (id) => ipcRenderer.invoke('productos:activar', id),
+  ajustarStock: (datos) => ipcRenderer.invoke('productos:ajustarStock', datos),
+  listarBajoMinimo: () => ipcRenderer.invoke('productos:listarBajoMinimo'),
+  historialStock: (id) => ipcRenderer.invoke('productos:historialStock', id),
+},
+
 membresias: {
   vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),
