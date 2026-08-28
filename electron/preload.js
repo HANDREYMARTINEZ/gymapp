@@ -26,6 +26,17 @@ contextBridge.exposeInMainWorld('api', {
   login: (usuario, password) => ipcRenderer.invoke('auth:login', usuario, password),
 },
 
+usuarios: {
+  listar: () => ipcRenderer.invoke('usuarios:listar'),
+  obtener: (id) => ipcRenderer.invoke('usuarios:obtener', id),
+  crear: (datos) => ipcRenderer.invoke('usuarios:crear', datos),
+  editar: (id, cambios) => ipcRenderer.invoke('usuarios:editar', id, cambios),
+  cambiarPassword: (datos) => ipcRenderer.invoke('usuarios:cambiarPassword', datos),
+  desactivar: (id) => ipcRenderer.invoke('usuarios:desactivar', id),
+  activar: (id) => ipcRenderer.invoke('usuarios:activar', id),
+  roles: () => ipcRenderer.invoke('usuarios:roles'),
+},
+
 clientes: {
   crear: (cliente) => ipcRenderer.invoke('clientes:crear', cliente),
   buscar: (texto) => ipcRenderer.invoke('clientes:buscar', texto),

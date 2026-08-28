@@ -1,8 +1,8 @@
 const { ipcMain, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const argon2 = require('argon2');
 const { getDb } = require('../db/connection');
+const usuarios = require('../db/repos/usuarios');
 const { generarDEK, generarSalt, derivarKEK, envolverDEK, envolverDEKConClavePublica } = require('../crypto/dek');
 
 function getConfig(clave) {
@@ -37,14 +37,20 @@ ipcMain.handle('setup:datos-gimnasio', (_evt, datos) => {
   return true;
 });
 
+// Pasa por el repo de usuarios en vez de insertar a mano, para que el admin del
+// wizard nazca con las mismas reglas que cualquier otro: login normalizado a
+// minusculas y las mismas validaciones. Insertando aqui aparte, el primer usuario
+// del sistema era justo el que no las cumplia.
 ipcMain.handle('setup:crear-admin', async (_evt, datos) => {
-  const hash = await argon2.hash(datos.password);
-  getDb().prepare(
-    `INSERT INTO usuarios (nombre, usuario, hash_pass, rol, activo, creado_en)
-     VALUES (?, ?, ?, 'admin', 1, ?)`
-  ).run(datos.nombre, datos.usuario, hash, new Date().toISOString());
+  const r = await usuarios.crear({
+    nombre: datos.nombre,
+    usuario: datos.usuario,
+    password: datos.password,
+    rol: 'admin',
+  });
+  if (!r.ok) return r;
   setConfig('setup_paso_actual', '4');
-  return true;
+  return r;
 });
 
 ipcMain.handle('setup:finalizar', (_evt, passphrase) => {
