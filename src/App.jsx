@@ -9,7 +9,10 @@ import Clientes from './screens/Clientes';
 import Planes from './screens/Planes';
 import Kiosco from './screens/Kiosco';
 import Desbloqueo from './screens/Desbloqueo';
+import Configuracion from './screens/Configuracion';
 
+
+const CONSTRUIDAS = ['clientes', 'planes', 'kiosco', 'configuracion'];
 
 export default function App() {
   const [cargando, setCargando] = useState(true);
@@ -48,10 +51,6 @@ export default function App() {
     return <Login onLogin={setUsuarioActual} />;
   }
 
-  if (!usuarioActual) {
-    return <Login onLogin={setUsuarioActual} />;
-  }
-
   return (
     <Layout
       usuarioActual={usuarioActual}
@@ -62,7 +61,8 @@ export default function App() {
       {pantallaActiva === 'clientes' && <Clientes usuarioActual={usuarioActual} />}
       {pantallaActiva === 'planes' && <Planes />}
       {pantallaActiva === 'kiosco' && <Kiosco />}
-      {pantallaActiva !== 'clientes' && pantallaActiva !== 'planes' && pantallaActiva !== 'kiosco' && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
+      {pantallaActiva === 'configuracion' && <Configuracion />}
+      {!CONSTRUIDAS.includes(pantallaActiva) && <p>Pantalla "{pantallaActiva}" — pendiente de construir</p>}
     </Layout>
   );
 }
