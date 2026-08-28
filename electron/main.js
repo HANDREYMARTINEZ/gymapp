@@ -11,6 +11,7 @@ require('./ipc/pausas');
 require('./ipc/asistencias');
 require('./ipc/kiosco');
 require('./ipc/desbloqueo');
+require('./ipc/backup');
 
 
 let mainWindow;

@@ -91,3 +91,5 @@ function obtenerDekEnMemoria() {
 
 module.exports.guardarDekEnMemoria = guardarDekEnMemoria;
 module.exports.obtenerDekEnMemoria = obtenerDekEnMemoria;
+module.exports.cifrarBuffer = module.exports.envolverDEK;
+module.exports.descifrarBuffer = module.exports.desenvolverDEK;

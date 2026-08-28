@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('api', {
     estaDesbloqueado: () => ipcRenderer.invoke('desbloqueo:estaDesbloqueado'),
 },
 
+backup: {
+  generar: () => ipcRenderer.invoke('backup:generar'),
+  listar: () => ipcRenderer.invoke('backup:listar'),
+},
+
   auth: {
   login: (usuario, password) => ipcRenderer.invoke('auth:login', usuario, password),
 },
