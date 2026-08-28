@@ -3,6 +3,8 @@ const path = require('path');
 const archiver = require('archiver');
 const { app } = require('electron');
 const { obtenerDekEnMemoria, cifrarBuffer } = require('../crypto/dek');
+const AdmZip = require('adm-zip');
+const { descifrarBuffer } = require('../crypto/dek');
 
 const MAX_RESPALDOS = 14; // ~2 semanas si se genera uno por día
 
@@ -73,4 +75,30 @@ function listarRespaldos(carpetaDestino) {
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
-module.exports = { generarRespaldo, listarRespaldos, carpetaRespaldosDefault };
+function restaurarRespaldo(rutaArchivo) {
+  const dek = obtenerDekEnMemoria();
+  if (!dek) {
+    throw new Error('No se puede restaurar: la app no está desbloqueada');
+  }
+
+  const cifradoHex = fs.readFileSync(rutaArchivo, 'utf-8');
+  const zipBuffer = descifrarBuffer(cifradoHex, dek);
+
+  const zip = new AdmZip(zipBuffer);
+  const entrada = zip.getEntry('gym.db');
+  if (!entrada) {
+    throw new Error('El archivo de respaldo no contiene una base de datos válida');
+  }
+  const dbBuffer = entrada.getData();
+
+  const userDataPath = app.getPath('userData');
+  const rutaPendiente = path.join(userDataPath, 'gym.db.restored');
+  fs.writeFileSync(rutaPendiente, dbBuffer);
+
+  const rutaFlag = path.join(userDataPath, 'restore-pendiente.flag');
+  fs.writeFileSync(rutaFlag, rutaPendiente);
+
+  return { ok: true, requiereReiniciar: true };
+}
+
+module.exports = { generarRespaldo, listarRespaldos, carpetaRespaldosDefault, restaurarRespaldo };

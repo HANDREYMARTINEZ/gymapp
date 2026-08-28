@@ -5,7 +5,28 @@ const { app } = require('electron');
 
 let db;
 
+function aplicarRestauracionPendiente() {
+  const userDataPath = app.getPath('userData');
+  const rutaFlag = path.join(userDataPath, 'restore-pendiente.flag');
+  if (!fs.existsSync(rutaFlag)) return;
+
+  const rutaPendiente = fs.readFileSync(rutaFlag, 'utf-8');
+  const dbPath = path.join(userDataPath, 'gym.db');
+
+  if (fs.existsSync(dbPath)) {
+    const respaldoSeguridad = path.join(userDataPath, `gym.db.antes-de-restaurar-${Date.now()}`);
+    fs.renameSync(dbPath, respaldoSeguridad);
+    console.log('Respaldo de seguridad del gym.db anterior guardado en:', respaldoSeguridad);
+  }
+
+  fs.renameSync(rutaPendiente, dbPath);
+  fs.unlinkSync(rutaFlag);
+  console.log('Restauración aplicada correctamente.');
+}
+
 function conectar() {
+  aplicarRestauracionPendiente();
+
   const dbPath = path.join(app.getPath('userData'), 'gym.db');
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
