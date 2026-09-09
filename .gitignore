@@ -6,3 +6,24 @@ dist-electron/
 *.db-wal
 resources/dev-private.pem
 .env
+
+# --- Sidecar de huella (proyecto de Visual Studio) -------------------------
+#
+# Lo que compila no se versiona: son 17 MB que cambian en cada build. Se
+# regenera con
+#   dotnet msbuild "EnrollmentSample CS.csproj" -t:Rebuild -p:Configuration=Release
+#
+# Consecuencia a tener presente: bin/Release es lo que electron-builder copia al
+# instalador (extraResources), asi que en un clon nuevo hay que compilar el
+# sidecar ANTES de generar el instalador.
+#
+# libs/ NO se ignora: son las DLL del SDK de DigitalPersona a las que apuntan
+# los HintPath del .csproj, y sin ellas el proyecto no compila.
+sidecar-huella/bin/
+sidecar-huella/obj/
+sidecar-huella/packages/
+sidecar-huella/Release/
+sidecar-huella/Backup/
+sidecar-huella/Backup1/
+sidecar-huella/UpgradeLog*.htm
+sidecar-huella/.vs/

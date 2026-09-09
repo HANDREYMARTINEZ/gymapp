@@ -1,5 +1,7 @@
 const argon2 = require('argon2');
 const { getDb } = require('../connection');
+const llaves = require('../../services/llaves');
+const { obtenerDekEnMemoria } = require('../../crypto/dek');
 
 const ROLES = ['admin', 'asistente'];
 
@@ -73,6 +75,14 @@ async function crear({ nombre, usuario, password, rol }) {
       INSERT INTO usuarios (nombre, usuario, hash_pass, rol, activo, creado_en)
       VALUES (?, ?, ?, ?, 1, ?)
     `).run(String(nombre).trim(), login, hash, rol, new Date().toISOString());
+
+    // Se le deja lista su envoltura de la DEK con la contrasena que acaba de
+    // ponerse, para que su primer login no tenga que pedir la passphrase. Solo
+    // se puede si quien lo esta creando ya tiene la base abierta, que es el caso
+    // normal: lo crea un admin desde dentro de la app.
+    const dek = obtenerDekEnMemoria();
+    if (dek) await llaves.guardarLlave(info.lastInsertRowid, password, dek);
+
     return { ok: true, id: info.lastInsertRowid };
   } catch (e) {
     if (String(e.message).includes('UNIQUE')) return { ok: false, motivo: 'usuario_ya_existe' };
@@ -106,6 +116,13 @@ async function cambiarPassword({ id, password }) {
 
   const hash = await argon2.hash(password);
   getDb().prepare(`UPDATE usuarios SET hash_pass = ? WHERE id = ?`).run(hash, id);
+
+  // La envoltura vieja se abria con la contrasena anterior: o se rehace ahora o
+  // se borra, pero no puede quedarse. Si se quedara, el proximo login intentaria
+  // abrirla con la contrasena nueva, fallaria, y el usuario se veria pidiendo la
+  // passphrase sin entender por que.
+  await llaves.rehacerLlave(id, password, obtenerDekEnMemoria());
+
   return { ok: true };
 }
 

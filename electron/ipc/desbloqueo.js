@@ -1,75 +1,53 @@
+// Escrow y desbloqueo por passphrase: SE CONSERVAN A PROPOSITO.
+//
+// Ninguna pantalla llama a estos tres canales, y una auditoria de codigo muerto
+// los senala. No lo son. El 06-sep-2026 se decidio que la app arranca en el
+// Login y que cada usuario abre el cifrado con su contrasena, y que el escrow
+// "sigue en el codigo y en los datos, pero ya no tiene entrada desde la
+// interfaz". Es la ultima salida si algun dia nadie puede entrar: la DEK
+// envuelta con la clave publica de recuperacion se abre desde aqui con la
+// privada, sin pasar por ninguna contrasena de usuario.
+//
+// Borrarlos seria tirar la unica copia de esa puerta. Las suites desbloqueo.js
+// y produccion.js los prueban justamente para que sigan funcionando el dia que
+// hagan falta.
+
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
-const { derivarKEK, desenvolverDEK, guardarDekEnMemoria, obtenerDekEnMemoria } = require('../crypto/dek');
-
-// La passphrase es la llave de todo el cifrado y se podia probar infinitas veces
-// sin coste. El freno es una espera creciente por intento fallido, no un bloqueo
-// permanente: esto es una app de escritorio, no hay a quien pedirle que la
-// desbloquee, y dejar fuera al dueno por teclear mal seria peor que el ataque.
-//
-// El contador vive en memoria a proposito. Reiniciar la app lo limpia, pero cada
-// reinicio cuesta segundos y la espera vuelve a crecer desde el primer fallo, asi
-// que probar a ciegas sigue siendo lento. Guardarlo en la base daria un freno mas
-// duro a cambio de poder dejar al dueno encerrado tras un susto.
-const ESPERAS_MS = [0, 0, 1000, 3000, 5000, 10000, 15000, 30000];
-const ESPERA_MAXIMA_MS = 60000;
-
-let fallosSeguidos = 0;
-let esperarHasta = 0;
-
-function esperaTrasFallos(n) {
-  return n < ESPERAS_MS.length ? ESPERAS_MS[n] : ESPERA_MAXIMA_MS;
-}
+const { derivarKEK, desenvolverDEK, desenvolverDEKConClavePrivada, guardarDekEnMemoria, obtenerDekEnMemoria } = require('../crypto/dek');
 
 function getConfig(clave) {
   const row = getDb().prepare(`SELECT valor FROM config WHERE clave = ?`).get(clave);
   return row ? row.valor : null;
 }
 
-function registrarFallo() {
-  fallosSeguidos++;
-  const espera = esperaTrasFallos(fallosSeguidos);
-  esperarHasta = Date.now() + espera;
-
-  getDb().prepare(`
-    INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
-    VALUES (NULL, 'desbloqueo_fallido', 'config', NULL, ?, ?)
-  `).run(new Date().toISOString(), JSON.stringify({ fallosSeguidos, esperaMs: espera }));
-
-  return espera;
-}
-
-const segundos = (ms) => Math.ceil(ms / 1000);
-
-ipcMain.handle('desbloqueo:intentar', (_evt, passphrase) => {
-  const restante = esperarHasta - Date.now();
-  if (restante > 0) {
-    return {
-      ok: false,
-      error: 'Demasiados intentos fallidos. Espera ' + segundos(restante) + ' segundos.',
-      esperaMs: restante,
-    };
-  }
-
+ipcMain.handle('desbloqueo:intentar', async (_evt, passphrase) => {
   try {
     const salt = getConfig('kdf_salt');
     const wrapped = getConfig('dek_wrapped_user');
-    const kek = derivarKEK(passphrase, salt);
+    const kek = await derivarKEK(passphrase, salt);
     const dek = desenvolverDEK(wrapped, kek);
-
     guardarDekEnMemoria(dek);
-    fallosSeguidos = 0;
-    esperarHasta = 0;
     return { ok: true };
   } catch (e) {
-    const espera = registrarFallo();
-    return {
-      ok: false,
-      error: espera > 0
-        ? 'Passphrase incorrecta. Espera ' + segundos(espera) + ' segundos antes de reintentar.'
-        : 'Passphrase incorrecta.',
-      esperaMs: espera,
-    };
+    return { ok: false, error: 'Passphrase incorrecta' };
+  }
+});
+
+// setup:finalizar guarda el escrow bajo 'dek_wrapped_recovery'. Este handler
+// leia 'dek_wrapped_dev', que no lo escribe nadie, asi que el acceso de
+// desarrollador respondia "no hay clave de escrow" incluso con la clave privada
+// correcta. Se lee el nombre real, no al reves: las bases ya instaladas tienen
+// guardada la fila con ese nombre y renombrarla en setup las dejaria sin salida.
+ipcMain.handle('desbloqueo:dev', (_evt, clavePrivadaPem) => {
+  try {
+    const wrapped = getConfig('dek_wrapped_recovery');
+    if (!wrapped) return { ok: false, error: 'No hay clave de escrow guardada' };
+    const dek = desenvolverDEKConClavePrivada(wrapped, clavePrivadaPem);
+    guardarDekEnMemoria(dek);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'Clave privada inválida' };
   }
 });
 
@@ -77,10 +55,4 @@ ipcMain.handle('desbloqueo:estaDesbloqueado', () => {
   return obtenerDekEnMemoria() !== null;
 });
 
-// Solo para pruebas: deja el contador como recien arrancada la app.
-function reiniciarFrenoParaPruebas() {
-  fallosSeguidos = 0;
-  esperarHasta = 0;
-}
-
-module.exports = { esperaTrasFallos, reiniciarFrenoParaPruebas };
+module.exports = {};

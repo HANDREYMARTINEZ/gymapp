@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
 import VenderMembresiaForm from './VenderMembresiaForm';
+import RenovarMembresiaForm from './RenovarMembresiaForm';
+import EliminarMembresiaForm from './EliminarMembresiaForm';
 import RegistrarPagoForm from './RegistrarPagoForm';
+import BotonVolver from '../components/BotonVolver';
 
+// Fondos de etiqueta con letra clara encima: todos oscuros. "Programada" va en
+// oro apagado, no en el amarillo de la marca, que dejaria el texto ilegible.
 const COLOR_ESTADO = {
   activa: 'var(--exito-solido)',
   por_vencer: 'var(--aviso-solido)',
+  programada: 'var(--acento-profundo)',
   vencida: 'var(--error-solido)',
   agotada: 'var(--error-solido)',
   pausada: 'var(--neutro-solido)',
@@ -15,12 +21,18 @@ const COLOR_ESTADO = {
 const LABEL_ESTADO = {
   activa: 'Activa',
   por_vencer: 'Por vencer',
+  programada: 'Programada',
   vencida: 'Vencida',
   agotada: 'Agotada',
   pausada: 'Pausada',
   saldo_pendiente: 'Saldo pendiente',
   anulada: 'Anulada',
 };
+
+// El historial de un cliente antiguo puede tener decenas de membresias, y todas
+// menos una son papel viejo. Estas son las que siguen contando para algo; el
+// resto se esconde detras del boton de historial.
+const VIGENTES = ['activa', 'por_vencer', 'programada', 'pausada', 'saldo_pendiente'];
 
 export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVolver }) {
   const [cliente, setCliente] = useState(null);
@@ -31,6 +43,9 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   const [mostrarVender, setMostrarVender] = useState(false);
   const [mostrarPagoId, setMostrarPagoId] = useState(null);
   const [mostrarPausaId, setMostrarPausaId] = useState(null);
+  const [mostrarRenovarId, setMostrarRenovarId] = useState(null);
+  const [mostrarEliminarId, setMostrarEliminarId] = useState(null);
+  const [verHistorial, setVerHistorial] = useState(false);
   const [motivoPausa, setMotivoPausa] = useState('');
 
   async function cargar() {
@@ -43,6 +58,14 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   }
 
   useEffect(() => { cargar(); }, [clienteId]);
+
+  function cerrarPaneles() {
+    setMostrarPagoId(null);
+    setMostrarPausaId(null);
+    setMostrarRenovarId(null);
+    setMostrarEliminarId(null);
+    setMotivoPausa('');
+  }
 
   async function expandir(membresiaId) {
     if (expandidaId === membresiaId) {
@@ -58,8 +81,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
 
   async function confirmarPausa(membresiaId) {
     await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
-    setMostrarPausaId(null);
-    setMotivoPausa('');
+    cerrarPaneles();
     cargar();
   }
 
@@ -73,98 +95,175 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     cargar();
   }
 
-  function despuesDePago() {
-    setMostrarPagoId(null);
+  function despuesDeCambio() {
+    cerrarPaneles();
     cargar();
   }
 
   if (!cliente) return <p>Cargando...</p>;
 
+  const vigentes = membresias.filter(m => VIGENTES.includes(m.estado));
+  const historial = membresias.filter(m => !VIGENTES.includes(m.estado));
+  // Si no queda ninguna vigente, se muestra igual la ultima: dejar el bloque
+  // vacio cuando el cliente si tuvo membresias engana mas que informar.
+  const arriba = vigentes.length > 0 ? vigentes : membresias.slice(0, 1);
+  const abajo = historial.filter(m => !arriba.includes(m));
+
+  function tarjeta(m) {
+    return (
+      <div key={m.id} style={{ border: '1px solid var(--borde-suave)', borderRadius: 'var(--radio)', marginBottom: 10, padding: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 12 }} onClick={() => expandir(m.id)}>
+          <div>
+            <b>{m.plan_nombre}</b>{' '}
+            ({m.plan_tipo === 'periodo'
+              ? `${m.f_inicio} → ${m.f_fin}`
+              : `${m.tickets_totales - m.tickets_usados} de ${m.tickets_totales} tickets`})
+          </div>
+          <span style={{ color: 'var(--texto)', background: COLOR_ESTADO[m.estado] || 'var(--neutro-solido)', padding: '2px 10px', borderRadius: 12, fontSize: 12, whiteSpace: 'nowrap' }}>
+            {LABEL_ESTADO[m.estado] || m.estado}
+          </span>
+        </div>
+
+        {m.estado === 'programada' && (
+          <p style={{ color: 'var(--acento-claro)', marginBottom: 0, fontSize: 13 }}>
+            Todavía no empieza. El cliente no podrá entrar hasta el {m.f_inicio}.
+          </p>
+        )}
+
+        {m.saldoPendiente > 0 && (
+          <p style={{ color: 'var(--aviso)', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
+        )}
+
+        {m.anulada === 0 && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {m.saldoPendiente > 0 && (
+              <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarPagoId !== m.id; cerrarPaneles(); setMostrarPagoId(abrir ? m.id : null); }}>
+                Registrar pago
+              </button>
+            )}
+            {m.estado === 'pausada'
+              ? <button onClick={(e) => { e.stopPropagation(); reactivar(m.id); }}>Reactivar</button>
+              : <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarPausaId !== m.id; cerrarPaneles(); setMostrarPausaId(abrir ? m.id : null); }}>Pausar</button>
+            }
+            <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarRenovarId !== m.id; cerrarPaneles(); setMostrarRenovarId(abrir ? m.id : null); }}>
+              Renovar
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarEliminarId !== m.id; cerrarPaneles(); setMostrarEliminarId(abrir ? m.id : null); }}>
+              Eliminar
+            </button>
+          </div>
+        )}
+
+        {mostrarPausaId === m.id && (
+          <div style={{ marginTop: 8, padding: 8, background: 'var(--superficie-alta)', borderRadius: 'var(--radio)' }} onClick={e => e.stopPropagation()}>
+            <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
+            <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
+            <button onClick={cerrarPaneles} style={{ marginLeft: 8 }}>Cancelar</button>
+          </div>
+        )}
+
+        {mostrarPagoId === m.id && (
+          <RegistrarPagoForm membresiaId={m.id} fInicioActual={m.f_inicio} usuarioActual={usuarioActual}
+                             onGuardado={despuesDeCambio} onCancelar={cerrarPaneles} />
+        )}
+
+        {mostrarRenovarId === m.id && (
+          <RenovarMembresiaForm membresia={m} usuarioActual={usuarioActual}
+                                onRenovado={despuesDeCambio} onCancelar={cerrarPaneles} />
+        )}
+
+        {mostrarEliminarId === m.id && (
+          <EliminarMembresiaForm membresia={m} pagado={m.pagadoEfectivo} usuarioActual={usuarioActual}
+                                 onEliminada={despuesDeCambio} onCancelar={cerrarPaneles} />
+        )}
+
+        {expandidaId === m.id && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--borde-suave)' }}>
+            <p>Precio acordado: ${m.precio_pagado.toLocaleString('es-CO')} {m.descuento > 0 && `(descuento ${m.descuento}%)`}</p>
+
+            <h4>Pagos</h4>
+            {(pagosPorMembresia[m.id] || []).length === 0 && <p>Sin pagos registrados.</p>}
+            <ul>
+              {(pagosPorMembresia[m.id] || []).map(p => (
+                <li key={p.id} style={{ textDecoration: p.anulada ? 'line-through' : 'none' }}>
+                  ${p.monto.toLocaleString('es-CO')} — {p.metodo} — {p.fecha.slice(0, 10)} {p.nota && `(${p.nota})`}
+                </li>
+              ))}
+            </ul>
+
+            <h4>Pausas</h4>
+            {(pausasPorMembresia[m.id] || []).length === 0 && <p>Sin pausas registradas.</p>}
+            <ul>
+              {(pausasPorMembresia[m.id] || []).map(p => (
+                <li key={p.id}>
+                  {p.f_inicio} → {p.f_fin || 'en curso'} {p.motivo && `(${p.motivo})`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
-      <button onClick={onVolver}>← Volver a la lista</button>
+      <BotonVolver onClick={onVolver} texto="← Volver a la lista" />
       <h1 style={{ marginBottom: 4 }}>{cliente.nombre}</h1>
       <p style={{ color: 'var(--texto-suave)', marginTop: 0 }}>
         {cliente.documento || 'sin documento'} — {cliente.telefono || 'sin teléfono'} — {cliente.email || 'sin email'}
       </p>
+
+      {/* El aviso vive en la ficha y no solo en el kiosco porque es aqui donde se
+          arregla: se entra a esta pantalla para tomarle la huella, ponerle el PIN
+          o venderle una membresia, y en cualquiera de esos momentos conviene
+          acordarse de pedirle la cedula. */}
+      {cliente.documento_provisional === 1 && (
+        <div style={{
+          margin: '10px 0 14px', padding: '10px 14px', maxWidth: 620,
+          background: 'var(--aviso-fondo)', border: '1px solid var(--aviso)',
+          borderRadius: 'var(--radio)', color: 'var(--aviso)',
+        }}>
+          <b>{'\u26A0'} Este cliente todavía no tiene documento.</b> Entró desde el
+          Excel sin cédula, así que la app le puso una provisional
+          (<code>{cliente.documento}</code>) para que pueda usar el kiosco. Cuando
+          te dé la real, escríbela en "Editar datos del cliente" y este aviso
+          desaparece solo.
+        </div>
+      )}
+
       <button onClick={() => onEditar(cliente)}>Editar datos del cliente</button>
 
-      <h2 style={{ marginTop: 30 }}>Membresías</h2>
-      {membresias.length === 0 && <p>Este cliente no tiene ninguna membresía todavía.</p>}
+      {/* El boton de vender va arriba, antes de la lista. Debajo quedaba enterrado
+          bajo un historial que solo crece, y es la accion que mas se usa. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 30, gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Membresías</h2>
+        {!mostrarVender && (
+          <button onClick={() => { cerrarPaneles(); setMostrarVender(true); }}>+ Vender membresía</button>
+        )}
+      </div>
 
-      {membresias.map(m => (
-        <div key={m.id} style={{ border: '1px solid var(--borde-suave)', borderRadius: 4, marginBottom: 10, padding: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => expandir(m.id)}>
-            <div>
-              <b>{m.plan_nombre}</b> ({m.plan_tipo === 'periodo' ? `${m.f_inicio} → ${m.f_fin}` : `${m.tickets_totales - m.tickets_usados} de ${m.tickets_totales} tickets`})
-            </div>
-            <span style={{ color: 'var(--texto)', background: COLOR_ESTADO[m.estado] || 'var(--neutro-solido)', padding: '2px 10px', borderRadius: 12, fontSize: 12 }}>
-              {LABEL_ESTADO[m.estado] || m.estado}
-            </span>
-          </div>
+      {mostrarVender && (
+        <VenderMembresiaForm clienteId={clienteId} usuarioActual={usuarioActual}
+                             onVendido={despuesDeVender} onCancelar={() => setMostrarVender(false)} />
+      )}
 
-          {m.saldoPendiente > 0 && (
-            <p style={{ color: 'var(--aviso)', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
-          )}
+      <div style={{ marginTop: 12 }}>
+        {membresias.length === 0 && <p>Este cliente no tiene ninguna membresía todavía.</p>}
+        {arriba.map(tarjeta)}
+      </div>
 
-          {m.anulada === 0 && (
-            <div style={{ marginTop: 8 }}>
-              {m.saldoPendiente > 0 && (
-                <button onClick={(e) => { e.stopPropagation(); setMostrarPagoId(mostrarPagoId === m.id ? null : m.id); }}>
-                  Registrar pago
-                </button>
-              )}
-              {m.estado === 'pausada'
-                ? <button onClick={(e) => { e.stopPropagation(); reactivar(m.id); }} style={{ marginLeft: 8 }}>Reactivar</button>
-                : <button onClick={(e) => { e.stopPropagation(); setMostrarPausaId(mostrarPausaId === m.id ? null : m.id); }} style={{ marginLeft: 8 }}>Pausar</button>
-              }
-            </div>
-          )}
-
-          {mostrarPausaId === m.id && (
-            <div style={{ marginTop: 8, padding: 8, background: 'var(--superficie-alta)', borderRadius: 4 }} onClick={e => e.stopPropagation()}>
-              <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
-              <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
-              <button onClick={() => { setMostrarPausaId(null); setMotivoPausa(''); }} style={{ marginLeft: 8 }}>Cancelar</button>
-            </div>
-          )}
-
-          {mostrarPagoId === m.id && (
-            <RegistrarPagoForm membresiaId={m.id} usuarioActual={usuarioActual} onGuardado={despuesDePago} onCancelar={() => setMostrarPagoId(null)} />
-          )}
-
-          {expandidaId === m.id && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--borde-suave)' }}>
-              <p>Precio acordado: ${m.precio_pagado.toLocaleString('es-CO')} {m.descuento > 0 && `(descuento ${m.descuento}%)`}</p>
-
-              <h4>Pagos</h4>
-              {(pagosPorMembresia[m.id] || []).length === 0 && <p>Sin pagos registrados.</p>}
-              <ul>
-                {(pagosPorMembresia[m.id] || []).map(p => (
-                  <li key={p.id} style={{ textDecoration: p.anulada ? 'line-through' : 'none' }}>
-                    ${p.monto.toLocaleString('es-CO')} — {p.metodo} — {p.fecha.slice(0, 10)} {p.nota && `(${p.nota})`}
-                  </li>
-                ))}
-              </ul>
-
-              <h4>Pausas</h4>
-              {(pausasPorMembresia[m.id] || []).length === 0 && <p>Sin pausas registradas.</p>}
-              <ul>
-                {(pausasPorMembresia[m.id] || []).map(p => (
-                  <li key={p.id}>
-                    {p.f_inicio} → {p.f_fin || 'en curso'} {p.motivo && `(${p.motivo})`}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      ))}
-
-      {mostrarVender
-        ? <VenderMembresiaForm clienteId={clienteId} usuarioActual={usuarioActual} onVendido={despuesDeVender} onCancelar={() => setMostrarVender(false)} />
-        : <button onClick={() => setMostrarVender(true)}>+ Vender membresía</button>
-      }
+      {abajo.length > 0 && (
+        <>
+          <button
+            onClick={() => setVerHistorial(v => !v)}
+            style={{ background: 'none', border: 'none', color: 'var(--acento-claro)', cursor: 'pointer', padding: '4px 0' }}
+          >
+            {verHistorial ? '▾ Ocultar historial' : `▸ Ver historial (${abajo.length})`}
+          </button>
+          {verHistorial && <div style={{ marginTop: 8 }}>{abajo.map(tarjeta)}</div>}
+        </>
+      )}
     </div>
   );
 }

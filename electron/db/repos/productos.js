@@ -15,8 +15,8 @@ function esChoqueDeCodigo(e) {
 function crear(producto) {
   try {
     const info = getDb().prepare(`
-      INSERT INTO productos (nombre, categoria, p_venta, p_costo, stock, stock_min, codigo_barras, activo)
-      VALUES (@nombre, @categoria, @p_venta, @p_costo, @stock, @stock_min, @codigo_barras, 1)
+      INSERT INTO productos (nombre, categoria, p_venta, p_costo, stock, stock_min, codigo_barras, fuera_de_caja, activo)
+      VALUES (@nombre, @categoria, @p_venta, @p_costo, @stock, @stock_min, @codigo_barras, @fuera_de_caja, 1)
     `).run({
       nombre: producto.nombre,
       categoria: producto.categoria || null,
@@ -25,6 +25,7 @@ function crear(producto) {
       stock: producto.stock || 0,
       stock_min: producto.stock_min || 0,
       codigo_barras: normalizarCodigo(producto.codigo_barras),
+      fuera_de_caja: producto.fuera_de_caja ? 1 : 0,
     });
     return { ok: true, id: info.lastInsertRowid };
   } catch (e) {
@@ -60,7 +61,8 @@ function editar(id, cambios) {
       UPDATE productos SET
         nombre = @nombre, categoria = @categoria,
         p_venta = @p_venta, p_costo = @p_costo,
-        stock_min = @stock_min, codigo_barras = @codigo_barras
+        stock_min = @stock_min, codigo_barras = @codigo_barras,
+        fuera_de_caja = @fuera_de_caja
       WHERE id = @id
     `).run({
       id,
@@ -70,6 +72,7 @@ function editar(id, cambios) {
       p_costo: cambios.p_costo || 0,
       stock_min: cambios.stock_min || 0,
       codigo_barras: normalizarCodigo(cambios.codigo_barras),
+      fuera_de_caja: cambios.fuera_de_caja ? 1 : 0,
     });
     return { ok: true };
   } catch (e) {

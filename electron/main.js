@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, session } = require('electron');
 const path = require('path');
 const { conectar } = require('./db/connection');
 require('./ipc/config');
@@ -17,6 +17,12 @@ require('./ipc/asistencias');
 require('./ipc/kiosco');
 require('./ipc/desbloqueo');
 require('./ipc/backup');
+require('./ipc/huellas');
+require('./ipc/imagenes');
+require('./ipc/intercambio');
+require('./ipc/desarrollador');
+require('./ipc/recordatorios');
+
 
 
 let mainWindow;
@@ -53,9 +59,21 @@ app.whenReady().then(() => {
   instalarMenu();
   conectar();
 
+  // La camara hace falta para tomarle la foto al cliente en recepcion. Electron
+  // sin handler concede casi todo por defecto; con este solo se concede la
+  // camara, y todo lo demas (microfono, ubicacion, notificaciones, portapapeles)
+  // se niega. La app se sirve de su propio bundle, asi que no hay pagina ajena
+  // que pueda pedirlo.
+  session.defaultSession.setPermissionRequestHandler((_wc, permiso, conceder) => {
+    conceder(permiso === 'media');
+  });
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    // El mismo negro de --fondo. Sin esto la ventana nace blanca y da un
+    // fogonazo antes de que cargue el CSS, que en una app oscura se nota.
+    backgroundColor: '#0c0b08',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -63,6 +81,11 @@ app.whenReady().then(() => {
       sandbox: true,
     },
   });
+
+  // El vigilante de los recordatorios de vencimiento. No manda nada hasta que
+  // alguien entre -- necesita la DEK para leer la contrasena del correo -- y por
+  // eso se puede arrancar aqui sin esperar a nada.
+  require('./services/recordatorios').iniciarProgramador();
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
@@ -72,6 +95,12 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', async () => {
+  try { require('./services/recordatorios').pararProgramador(); } catch (e) {}
+
+  // El sidecar es un proceso hijo: si no se cierra aqui, cada arranque deja otro
+  // vivo peleando por el puerto 8383 con el anterior.
+  try { require('./services/sidecarProceso').apagar(); } catch (e) {}
+
   try {
     const backupService = require('./services/backup');
     const { obtenerDekEnMemoria } = require('./crypto/dek');

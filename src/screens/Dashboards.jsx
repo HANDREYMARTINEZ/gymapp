@@ -85,6 +85,43 @@ function DesgloseMedios({ filas }) {
   );
 }
 
+// Una sola tabla para las dos mitades: producto y plan se miran igual --
+// que fue, cuanto se movio y cuanto dinero trajo -- y solo cambian los rotulos.
+// 'medida' es lo del medio: unidades en productos, pagos en membresias.
+function TablaVendido({ filas, columna, medida, total, vacio }) {
+  if (filas.length === 0) {
+    return vacio ? <p style={{ color: 'var(--texto-tenue)' }}>{vacio}</p> : null;
+  }
+  return (
+    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <thead>
+        <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
+          <th>{columna}</th>
+          <th style={{ textAlign: 'right' }}>Cantidad</th>
+          <th style={{ textAlign: 'right' }}>Importe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map(f => (
+          // Un producto puede salir dos veces, dentro y fuera de caja, asi que
+          // el id solo no distingue la fila.
+          <tr key={(f.id != null ? f.id + '-' + f.fueraDeCaja : f.nombre)}
+              style={{ borderBottom: '1px solid var(--borde-suave)' }}>
+            <td>{f.nombre}</td>
+            <td style={{ textAlign: 'right', color: 'var(--texto-suave)' }}>{medida(f)}</td>
+            <td style={{ textAlign: 'right' }}>{pesos(f.monto)}</td>
+          </tr>
+        ))}
+        <tr>
+          <td style={{ paddingTop: 8 }}><b>Total</b></td>
+          <td />
+          <td style={{ textAlign: 'right', paddingTop: 8 }}><b>{pesos(total)}</b></td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 export default function Dashboards() {
   const [datos, setDatos] = useState(null);
 
@@ -96,7 +133,13 @@ export default function Dashboards() {
 
   if (!datos) return <p>Cargando...</p>;
 
-  const { ingresos, asistenciasHoy, asistenciasSerie, porVencer, bajoMinimo, caja } = datos;
+  const { ingresos, vendido, asistenciasHoy, asistenciasSerie, porVencer, bajoMinimo, caja } = datos;
+
+  // Las dos mitades de la tienda se separan aqui y no en SQL porque la consulta
+  // ya viene ordenada por importe: partirla en dos consultas seria pedir dos
+  // veces lo mismo para volver a ordenarlo igual.
+  const productosDentro = vendido.productos.filter(p => !p.fueraDeCaja);
+  const productosFuera = vendido.productos.filter(p => p.fueraDeCaja);
 
   return (
     <div>
@@ -113,6 +156,28 @@ export default function Dashboards() {
               <tr><td style={{ color: 'var(--texto-suave)' }}>Membresías</td><td style={{ textAlign: 'right' }}>{pesos(ingresos.membresias.total)}</td></tr>
             </tbody>
           </table>
+        </Tarjeta>
+
+        {/* 5.16: las dos fuentes de dinero, cada una en su cajita. En "Ingresos
+            del dia" salen como dos renglones pequenos; aparte se leen de un
+            vistazo, que es como se mira un tablero. */}
+        <Tarjeta titulo="Ventas del día">
+          <Cifra>{pesos(ingresos.ventas.total)}</Cifra>
+          <div style={{ color: 'var(--texto-suave)', fontSize: 13, marginTop: 8 }}>
+            {ingresos.ventas.porMedio.reduce((s, m) => s + m.n, 0)} ventas de productos
+          </div>
+          {ingresos.fueraDeCaja && ingresos.fueraDeCaja.total > 0 && (
+            <div style={{ color: 'var(--aviso)', fontSize: 13, marginTop: 4 }}>
+              + {pesos(ingresos.fueraDeCaja.total)} fuera de caja, aparte
+            </div>
+          )}
+        </Tarjeta>
+
+        <Tarjeta titulo="Membresías del día">
+          <Cifra>{pesos(ingresos.membresias.total)}</Cifra>
+          <div style={{ color: 'var(--texto-suave)', fontSize: 13, marginTop: 8 }}>
+            {ingresos.membresias.porMedio.reduce((s, m) => s + m.n, 0)} pagos cobrados
+          </div>
         </Tarjeta>
 
         <Tarjeta titulo="Asistencias hoy">
@@ -162,6 +227,51 @@ export default function Dashboards() {
           <DesgloseMedios filas={ingresos.ventas.porMedio} />
           <p style={{ margin: '16px 0 2px', color: 'var(--texto)' }}><b>Membresías</b></p>
           <DesgloseMedios filas={ingresos.membresias.porMedio} />
+        </div>
+      </div>
+
+      {/* Las dos fuentes del dia, abiertas cosa por cosa. Los totales de cada
+          tabla son los mismos de las tarjetas de arriba: aqui no se suma nada
+          nuevo, solo se dice de que estaba hecho. */}
+      <h2 style={{ marginTop: 34 }}>Qué se vendió hoy</h2>
+      <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 380, flex: 1, maxWidth: 560 }}>
+          <h3>Productos</h3>
+          <TablaVendido
+            filas={productosDentro}
+            columna="Producto"
+            medida={(f) => f.unidades + (f.unidades === 1 ? ' unidad' : ' unidades')}
+            total={ingresos.ventas.total}
+            vacio="No se ha vendido ningún producto hoy."
+          />
+
+          {productosFuera.length > 0 && (
+            <>
+              <h4 style={{ marginTop: 20, color: 'var(--aviso)' }}>Fuera de caja</h4>
+              <p style={{ fontSize: 12, color: 'var(--texto-suave)', marginTop: 0 }}>
+                Se vendió en el mostrador pero no es dinero del gimnasio: no entra
+                en el total de arriba.
+              </p>
+              <TablaVendido
+                filas={productosFuera}
+                columna="Producto"
+                medida={(f) => f.unidades + (f.unidades === 1 ? ' unidad' : ' unidades')}
+                total={ingresos.fueraDeCaja.total}
+                vacio=""
+              />
+            </>
+          )}
+        </div>
+
+        <div style={{ minWidth: 380, flex: 1, maxWidth: 560 }}>
+          <h3>Membresías</h3>
+          <TablaVendido
+            filas={vendido.membresias}
+            columna="Plan"
+            medida={(f) => f.pagos + (f.pagos === 1 ? ' pago' : ' pagos')}
+            total={ingresos.membresias.total}
+            vacio="No se ha cobrado ninguna membresía hoy."
+          />
         </div>
       </div>
 

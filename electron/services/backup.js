@@ -135,4 +135,22 @@ function restaurarRespaldo(rutaArchivo) {
   return { ok: true, requiereReiniciar: true };
 }
 
-module.exports = { generarRespaldo, listarRespaldos, carpetaRespaldosDefault, restaurarRespaldo };
+// Borrar un respaldo es del panel de desarrollador, no del dia a dia: el
+// mostrador solo genera y restaura, y la rotacion ya se encarga de los viejos.
+//
+// La ruta llega desde el renderer, asi que se comprueba que caiga dentro de la
+// carpeta de respaldos antes de tocar el disco. Sin esa comprobacion, este
+// handler seria un "borra el archivo que yo te diga" con nombre bonito.
+function eliminarRespaldo(rutaArchivo, carpetaDestino) {
+  const carpeta = path.resolve(carpetaDestino || carpetaRespaldosDefault());
+  const ruta = path.resolve(String(rutaArchivo || ''));
+
+  if (path.dirname(ruta) !== carpeta) return { ok: false, motivo: 'fuera_de_la_carpeta' };
+  if (!ruta.endsWith('.gymbak')) return { ok: false, motivo: 'no_es_un_respaldo' };
+  if (!fs.existsSync(ruta)) return { ok: false, motivo: 'no_existe' };
+
+  fs.unlinkSync(ruta);
+  return { ok: true, nombre: path.basename(ruta) };
+}
+
+module.exports = { generarRespaldo, listarRespaldos, carpetaRespaldosDefault, restaurarRespaldo, eliminarRespaldo };

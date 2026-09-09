@@ -86,6 +86,30 @@ app.whenReady().then(async () => {
     check('las ventas no se contaminaron con el pago', ing2.ventas.total === 9000);
     check('el total del dia suma ambas fuentes', ing2.total === 109000, 'total=' + ing2.total);
 
+    // --- que se vendio, cosa por cosa ---
+    const vendidos = dash.productosVendidos(hoy);
+    check('el detalle trae una fila por producto vendido', vendidos.length === 1,
+          vendidos.length + ' filas');
+    check('con su nombre, sus unidades y su importe',
+          vendidos[0].nombre === 'Agua' && vendidos[0].unidades === 3 && vendidos[0].monto === 9000,
+          JSON.stringify(vendidos[0]));
+    check('la venta anulada tampoco cuenta en el detalle',
+          vendidos.reduce((s, f) => s + f.monto, 0) === ing2.ventas.total);
+    check('un producto que no se vendio no aparece',
+          !vendidos.some(f => f.id === toalla));
+    check('marca si la fila es de dentro o de fuera de caja',
+          vendidos[0].fueraDeCaja === 0, 'fueraDeCaja=' + vendidos[0].fueraDeCaja);
+
+    const planesVendidos = dash.membresiasVendidas(hoy);
+    check('el detalle de membresias agrupa por plan', planesVendidos.length === 1,
+          planesVendidos.length + ' filas');
+    check('con el nombre del plan, cuantos pagos y cuanto dinero',
+          planesVendidos[0].nombre === 'Mensual' && planesVendidos[0].pagos === 1 &&
+          planesVendidos[0].monto === 100000, JSON.stringify(planesVendidos[0]));
+    check('lo cobrado por planes cuadra con el bloque de membresias',
+          planesVendidos.reduce((s, f) => s + f.monto, 0) === ing2.membresias.total);
+    check('el detalle de ayer viene vacio', dash.productosVendidos(enDias(-1)).length === 0);
+
     // --- asistencias ---
     check('asistencias del dia arranca en 0', dash.asistenciasDelDia(hoy) === 0);
     const asis = asistencias.registrar({ clienteId: 1, metodo: 'manual', registradoPor: usuarioId });
@@ -142,6 +166,15 @@ app.whenReady().then(async () => {
     check('toalla aparece bajo minimo', r.bajoMinimo.some(p => p.id === toalla), 'stock=1 min=5');
     check('agua no aparece bajo minimo', !r.bajoMinimo.some(p => p.id === agua));
     check('con caja abierta el resumen la trae', r.caja !== null);
+    check('el resumen trae el detalle de lo vendido',
+          r.vendido.productos.length === 1 &&
+          r.vendido.membresias.some(f => f.nombre === 'Mensual') &&
+          r.vendido.membresias.some(f => f.nombre === 'Diez clases'),
+          JSON.stringify(r.vendido));
+    check('y lo del detalle suma lo mismo que las cifras de arriba',
+          r.vendido.membresias.reduce((s, f) => s + f.monto, 0) === r.ingresos.membresias.total &&
+          r.vendido.productos.reduce((s, f) => s + f.monto, 0) === r.ingresos.ventas.total,
+          'membresias=' + r.ingresos.membresias.total + ' ventas=' + r.ingresos.ventas.total);
     check('el esperado de caja incluye la venta y el pago en efectivo',
           r.caja.esperado === 156000, 'esperado=' + r.caja.esperado); // 50000 + 6000 + 100000
 

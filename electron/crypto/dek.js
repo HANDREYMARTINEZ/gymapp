@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const argon2 = require('argon2');
 
 function generarDEK() {
   return crypto.randomBytes(32);
@@ -8,9 +9,14 @@ function generarSalt() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function derivarKEK(passphrase, saltHex) {
+async function derivarKEK(passphrase, saltHex) {
   const salt = Buffer.from(saltHex, 'hex');
-  return crypto.scryptSync(passphrase, salt, 32);
+  return argon2.hash(passphrase, {
+    type: argon2.argon2id,
+    salt,
+    raw: true,
+    hashLength: 32,
+  });
 }
 
 function envolverDEK(dek, kek) {

@@ -11,10 +11,23 @@ contextBridge.exposeInMainWorld('api', {
     crearAdmin: (datos) => ipcRenderer.invoke('setup:crear-admin', datos),
     finalizar: (passphrase) => ipcRenderer.invoke('setup:finalizar', passphrase),
   },
+  // Ninguna pantalla los usa hoy y es deliberado: son la puerta de recuperacion
+  // por escrow, que se conserva sin entrada en la interfaz. Ver el comentario de
+  // electron/ipc/desbloqueo.js antes de borrarlos por "codigo muerto".
   desbloqueo: {
     intentar: (passphrase) => ipcRenderer.invoke('desbloqueo:intentar', passphrase),
+    dev: (clavePrivadaPem) => ipcRenderer.invoke('desbloqueo:dev', clavePrivadaPem),
     estaDesbloqueado: () => ipcRenderer.invoke('desbloqueo:estaDesbloqueado'),
 },
+
+  // Exportar / importar clientes y membresias, y los dialogos nativos de archivo.
+  intercambio: {
+    exportar: (formato) => ipcRenderer.invoke('intercambio:exportar', formato),
+    revisar: () => ipcRenderer.invoke('intercambio:revisar'),
+    importarRuta: (datos) => ipcRenderer.invoke('intercambio:importarRuta', datos),
+    respaldoEn: () => ipcRenderer.invoke('intercambio:respaldoEn'),
+    mostrarEnCarpeta: (ruta) => ipcRenderer.invoke('intercambio:mostrarEnCarpeta', ruta),
+  },
 
  backup: {
     generar: () => ipcRenderer.invoke('backup:generar'),
@@ -22,8 +35,39 @@ contextBridge.exposeInMainWorld('api', {
     restaurar: (ruta) => ipcRenderer.invoke('backup:restaurar', ruta),
   },
 
+  // Panel de desarrollador. El proceso principal comprueba en cada llamada que
+  // la passphrase se haya escrito en esta sesion; esto solo es el cable.
+  desarrollador: {
+    diagnostico: () => ipcRenderer.invoke('dev:diagnostico'),
+    zonas: () => ipcRenderer.invoke('dev:zonas'),
+    vaciar: (zonas) => ipcRenderer.invoke('dev:vaciar', zonas),
+    resetFabrica: () => ipcRenderer.invoke('dev:resetFabrica'),
+    borrarCopiasAntiguas: () => ipcRenderer.invoke('dev:borrarCopiasAntiguas'),
+    eliminarRespaldo: (ruta) => ipcRenderer.invoke('dev:eliminarRespaldo', ruta),
+    resetearPassword: (datos) => ipcRenderer.invoke('dev:resetearPassword', datos),
+    usuarios: () => ipcRenderer.invoke('dev:usuarios'),
+    auditoria: (filtros) => ipcRenderer.invoke('dev:auditoria', filtros),
+    sembrarDemo: () => ipcRenderer.invoke('dev:sembrarDemo'),
+  },
+
+  // Recordatorios de vencimiento por correo.
+  recordatorios: {
+    estado: () => ipcRenderer.invoke('recordatorios:estado'),
+    previsualizar: () => ipcRenderer.invoke('recordatorios:previsualizar'),
+    guardar: (datos) => ipcRenderer.invoke('recordatorios:guardar', datos),
+    verificar: () => ipcRenderer.invoke('recordatorios:verificar'),
+    prueba: () => ipcRenderer.invoke('recordatorios:prueba'),
+    vistaPrevia: (tipo) => ipcRenderer.invoke('recordatorios:vistaPrevia', tipo),
+    enviarAhora: () => ipcRenderer.invoke('recordatorios:enviarAhora'),
+    historial: (limite) => ipcRenderer.invoke('recordatorios:historial', limite),
+  },
+
   auth: {
   login: (usuario, password) => ipcRenderer.invoke('auth:login', usuario, password),
+  cerrarSesion: () => ipcRenderer.invoke('auth:cerrarSesion'),
+  vincularPassphrase: (datos) => ipcRenderer.invoke('auth:vincularPassphrase', datos),
+  accesoDesarrollador: (passphrase) => ipcRenderer.invoke('auth:accesoDesarrollador', passphrase),
+  estaAbierto: () => ipcRenderer.invoke('auth:estaAbierto'),
 },
 
 usuarios: {
@@ -40,9 +84,13 @@ usuarios: {
 clientes: {
   crear: (cliente) => ipcRenderer.invoke('clientes:crear', cliente),
   buscar: (texto) => ipcRenderer.invoke('clientes:buscar', texto),
+  buscarConEstado: (texto) => ipcRenderer.invoke('clientes:buscarConEstado', texto),
+  panelLateral: () => ipcRenderer.invoke('clientes:panelLateral'),
   obtener: (id) => ipcRenderer.invoke('clientes:obtener', id),
   editar: (id, cambios) => ipcRenderer.invoke('clientes:editar', id, cambios),
   asignarPin: (id, pin) => ipcRenderer.invoke('clientes:asignarPin', id, pin),
+  tienePin: (id) => ipcRenderer.invoke('clientes:tienePin', id),
+  quitarPin: (id) => ipcRenderer.invoke('clientes:quitarPin', id),
 },
 planes: {
   crear: (plan) => ipcRenderer.invoke('planes:crear', plan),
@@ -82,6 +130,8 @@ ventas: {
   obtener: (ventaId) => ipcRenderer.invoke('ventas:obtener', ventaId),
   listarDelDia: (fecha) => ipcRenderer.invoke('ventas:listarDelDia', fecha),
   totalesDelDia: (fecha) => ipcRenderer.invoke('ventas:totalesDelDia', fecha),
+  fueraDeCajaDelDia: (fecha) => ipcRenderer.invoke('ventas:fueraDeCajaDelDia', fecha),
+  fueraDeCajaEntre: (desde, hasta) => ipcRenderer.invoke('ventas:fueraDeCajaEntre', desde, hasta),
   anular: (datos) => ipcRenderer.invoke('ventas:anular', datos),
   mediosPago: () => ipcRenderer.invoke('ventas:mediosPago'),
 },
@@ -94,8 +144,12 @@ dashboard: {
 
 membresias: {
   vender: (datos) => ipcRenderer.invoke('membresias:vender', datos),
+  anular: (datos) => ipcRenderer.invoke('membresias:anular', datos),
+  renovar: (datos) => ipcRenderer.invoke('membresias:renovar', datos),
+  cambiarFechaInicio: (datos) => ipcRenderer.invoke('membresias:cambiarFechaInicio', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),
   listarPorCliente: (clienteId) => ipcRenderer.invoke('membresias:listarPorCliente', clienteId),
+  pagosDelDia: (fecha) => ipcRenderer.invoke('membresias:pagosDelDia', fecha),
   listarPagos: (membresiaId) => ipcRenderer.invoke('membresias:listarPagos', membresiaId),
 },
 
@@ -110,8 +164,29 @@ asistencias: {
   listarDelDia: (fecha) => ipcRenderer.invoke('asistencias:listarDelDia', fecha),
 },
 
+
+huellas: {
+  enrolar: (clienteId, dedo) => ipcRenderer.invoke('huellas:enrolar', { clienteId, dedo }),
+  listarPorCliente: (clienteId) => ipcRenderer.invoke('huellas:listarPorCliente', clienteId),
+  eliminar: (clienteId, dedo) => ipcRenderer.invoke('huellas:eliminar', clienteId, dedo),
+},
+
+// Mecanismo unico de imagenes: foto de cliente, imagen de producto y logo del
+// gimnasio. obtener() devuelve un data URL listo para el src de una <img>, o
+// null si esa cosa no tiene imagen todavia.
+imagenes: {
+  guardar: (datos) => ipcRenderer.invoke('imagenes:guardar', datos),
+  obtener: (entidad, entidadId) => ipcRenderer.invoke('imagenes:obtener', entidad, entidadId),
+  obtenerVarias: (entidad, ids) => ipcRenderer.invoke('imagenes:obtenerVarias', entidad, ids),
+  existe: (entidad, entidadId) => ipcRenderer.invoke('imagenes:existe', entidad, entidadId),
+  eliminar: (entidad, entidadId) => ipcRenderer.invoke('imagenes:eliminar', entidad, entidadId),
+},
+
 kiosco: {
   marcarPorPin: (datos) => ipcRenderer.invoke('kiosco:marcarPorPin', datos),
+  iniciarEscuchaHuella: () => ipcRenderer.invoke('kiosco:iniciarEscuchaHuella'),
+  onHuellaDetectada: (callback) => ipcRenderer.on('kiosco:huellaDetectada', (_evt, data) => callback(data)),
 },
+
 
 });

@@ -1,0 +1,60 @@
+const { ipcMain } = require('electron');
+const recordatorios = require('../services/recordatorios');
+const correo = require('../services/correo');
+
+ipcMain.handle('recordatorios:estado', () => {
+  const config = recordatorios.leerConfig();
+  const lista = recordatorios.destinatarios(config);
+  return {
+    ok: true,
+    config,
+    proxima: recordatorios.proximaRonda(config),
+    resumen: {
+      porEnviar: lista.porEnviar.length,
+      vencidas: lista.porEnviar.filter(d => d.tipo === 'vencida').length,
+      porVencer: lista.porEnviar.filter(d => d.tipo === 'por_vencer').length,
+      yaAvisados: lista.yaAvisados.length,
+      sinCorreo: lista.sinCorreo.length,
+      correoInvalido: lista.correoInvalido.length,
+    },
+  };
+});
+
+// La lista completa, con nombre y correo de cada uno. Se mira antes de mandar
+// nada: la primera ronda de correos de verdad no se lanza a ciegas.
+ipcMain.handle('recordatorios:previsualizar', () => {
+  const config = recordatorios.leerConfig();
+  return { ok: true, ...recordatorios.destinatarios(config) };
+});
+
+ipcMain.handle('recordatorios:guardar', (_evt, { config, password }) => {
+  recordatorios.guardarConfig(config);
+  // La contrasena solo se toca si la pantalla manda una. undefined significa "no
+  // la cambies"; cadena vacia significa "borrala".
+  if (password !== undefined) {
+    const r = correo.guardarPassword(password);
+    if (!r.ok) return r;
+  }
+  return { ok: true, config: recordatorios.leerConfig() };
+});
+
+// Comprueba usuario y contrasena contra Gmail sin mandarle nada a nadie.
+ipcMain.handle('recordatorios:verificar', async () => {
+  const config = recordatorios.leerConfig();
+  const password = correo.leerPassword();
+  if (!config.remitente) return { ok: false, motivo: 'Falta el correo del remitente.' };
+  if (!password) return { ok: false, motivo: 'Falta la contraseña de aplicación.' };
+  return correo.verificar({ remitente: config.remitente, password });
+});
+
+ipcMain.handle('recordatorios:prueba', () => recordatorios.enviarPrueba());
+
+ipcMain.handle('recordatorios:vistaPrevia', (_evt, tipo) => recordatorios.vistaPrevia(tipo));
+
+ipcMain.handle('recordatorios:enviarAhora', () => recordatorios.enviarRonda({ manual: true }));
+
+ipcMain.handle('recordatorios:historial', (_evt, limite) => ({
+  ok: true, filas: recordatorios.historial(limite),
+}));
+
+module.exports = {};

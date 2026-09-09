@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ProductoForm from './ProductoForm';
+import Miniatura from '../components/Miniatura';
 
 const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
 
@@ -60,6 +61,7 @@ function AjusteStock({ producto, usuarioActual, onListo, onCancelar }) {
 
 export default function Inventario({ usuarioActual }) {
   const [productos, setProductos] = useState([]);
+  const [imagenes, setImagenes] = useState({});
   const [modo, setModo] = useState('lista');
   const [productoEditando, setProductoEditando] = useState(null);
   const [ajustando, setAjustando] = useState(null);
@@ -68,7 +70,9 @@ export default function Inventario({ usuarioActual }) {
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(false);
 
   async function cargar() {
-    setProductos(await window.api.productos.listarTodos());
+    const lista = await window.api.productos.listarTodos();
+    setProductos(lista);
+    setImagenes(await window.api.imagenes.obtenerVarias('producto', lista.map(p => p.id)));
   }
 
   useEffect(() => { cargar(); }, []);
@@ -142,7 +146,7 @@ export default function Inventario({ usuarioActual }) {
       <table style={{ marginTop: 20, borderCollapse: 'collapse', width: '100%' }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
-            <th>Producto</th><th>Categoría</th><th>Venta</th><th>Costo</th>
+            <th></th><th>Producto</th><th>Categoría</th><th>Venta</th><th>Costo</th>
             <th>Stock</th><th>Mín.</th><th>Estado</th><th></th>
           </tr>
         </thead>
@@ -151,11 +155,19 @@ export default function Inventario({ usuarioActual }) {
             const bajo = p.activo && p.stock <= p.stock_min;
             return (
               <tr key={p.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: p.activo ? 1 : 0.5 }}>
+                <td style={{ width: 52 }}>
+                  <Miniatura url={imagenes[p.id]} nombre={p.nombre} lado={40} />
+                </td>
                 <td>
                   {p.nombre}
                   {p.codigo_barras && <><br /><small style={{ color: 'var(--texto-tenue)' }}>{p.codigo_barras}</small></>}
                 </td>
-                <td>{p.categoria || '—'}</td>
+                <td>
+                  {p.categoria || '—'}
+                  {p.fuera_de_caja ? (
+                    <><br /><small style={{ color: 'var(--aviso)' }}>Fuera de caja</small></>
+                  ) : null}
+                </td>
                 <td>{pesos(p.p_venta)}</td>
                 <td>{pesos(p.p_costo)}</td>
                 <td style={{ fontWeight: bajo ? 'bold' : 'normal', color: bajo ? 'var(--error)' : 'inherit' }}>
@@ -174,7 +186,7 @@ export default function Inventario({ usuarioActual }) {
             );
           })}
           {visibles.length === 0 && (
-            <tr><td colSpan={8} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
+            <tr><td colSpan={9} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
               {productos.length === 0 ? 'Todavía no hay productos.' : 'Ningún producto coincide con el filtro.'}
             </td></tr>
           )}

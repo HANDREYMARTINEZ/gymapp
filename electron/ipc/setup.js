@@ -1,8 +1,8 @@
 const { ipcMain, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const argon2 = require('argon2');
 const { getDb } = require('../db/connection');
-const usuarios = require('../db/repos/usuarios');
 const { generarDEK, generarSalt, derivarKEK, envolverDEK, envolverDEKConClavePublica } = require('../crypto/dek');
 
 function getConfig(clave) {
@@ -37,43 +37,42 @@ ipcMain.handle('setup:datos-gimnasio', (_evt, datos) => {
   return true;
 });
 
-// Pasa por el repo de usuarios en vez de insertar a mano, para que el admin del
-// wizard nazca con las mismas reglas que cualquier otro: login normalizado a
-// minusculas y las mismas validaciones. Insertando aqui aparte, el primer usuario
-// del sistema era justo el que no las cumplia.
 ipcMain.handle('setup:crear-admin', async (_evt, datos) => {
-  const r = await usuarios.crear({
-    nombre: datos.nombre,
-    usuario: datos.usuario,
-    password: datos.password,
-    rol: 'admin',
-  });
-  if (!r.ok) return r;
+  const hash = await argon2.hash(datos.password);
+  getDb().prepare(
+    `INSERT INTO usuarios (nombre, usuario, hash_pass, rol, activo, creado_en)
+     VALUES (?, ?, ?, 'admin', 1, ?)`
+  ).run(datos.nombre, datos.usuario, hash, new Date().toISOString());
   setConfig('setup_paso_actual', '4');
-  return r;
+  return true;
 });
 
-// Empaquetada, la app corre desde dentro del asar y __dirname apunta ahi, asi
-// que la ruta relativa a resources/ del proyecto deja de existir. El .pem se
-// copia como extraResource y en produccion vive junto a process.resourcesPath.
+// En desarrollo el .pem vive en resources/ dentro del repo. En la app instalada
+// no: electron-builder lo copia como extraResource, fuera del asar, y la ruta
+// relativa de aqui apuntaria dentro del asar, donde no esta. Terminar el asistente
+// habria fallado en la primera instalacion limpia y en ningun momento antes.
 function rutaClavePublica() {
-  return app.isPackaged
+  const empaquetada = process.resourcesPath
     ? path.join(process.resourcesPath, 'dev-public.pem')
-    : path.join(__dirname, '../../resources/dev-public.pem');
+    : null;
+  if (empaquetada && fs.existsSync(empaquetada)) return empaquetada;
+  return path.join(__dirname, '../../resources/dev-public.pem');
 }
 
-ipcMain.handle('setup:finalizar', (_evt, passphrase) => {
+ipcMain.handle('setup:finalizar', async (_evt, passphrase) => {
   const db = getDb();
   const publicKeyPem = fs.readFileSync(rutaClavePublica(), 'utf-8');
 
+  // La derivación (async, argon2id) va ANTES de la transacción —
+  // better-sqlite3 exige que las transacciones sean síncronas.
+  const dek = generarDEK();
+  const salt = generarSalt();
+  const kek = await derivarKEK(passphrase, salt);
+
+  const dekWrappedUser = envolverDEK(dek, kek);
+  const dekWrappedRecovery = envolverDEKConClavePublica(dek, publicKeyPem);
+
   const tx = db.transaction(() => {
-    const dek = generarDEK();
-    const salt = generarSalt();
-    const kek = derivarKEK(passphrase, salt);
-
-    const dekWrappedUser = envolverDEK(dek, kek);
-    const dekWrappedRecovery = envolverDEKConClavePublica(dek, publicKeyPem);
-
     setConfig('kdf_salt', salt);
     setConfig('dek_wrapped_user', dekWrappedUser);
     setConfig('dek_wrapped_recovery', dekWrappedRecovery);
@@ -84,4 +83,4 @@ ipcMain.handle('setup:finalizar', (_evt, passphrase) => {
   return true;
 });
 
-module.exports = {};
+module.exports = { rutaClavePublica };

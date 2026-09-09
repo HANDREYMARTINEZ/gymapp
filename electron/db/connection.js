@@ -33,8 +33,38 @@ function aplicarRestauracionPendiente() {
   console.log('Restauración aplicada correctamente.');
 }
 
+// Reset de fabrica del panel de desarrollador. Corre antes de abrir nada, por lo
+// mismo que la restauracion: con la base ya abierta, Windows no deja moverla.
+//
+// La base NO se borra, se aparta con un nombre que dice de que es. Un reset se
+// pide con la certeza de que sobra, y esa certeza se equivoca de vez en cuando;
+// la copia apartada es la unica vuelta atras, porque los respaldos viejos se
+// cifraron con la DEK anterior y despues del reset ya no hay quien los abra.
+// Del panel se pueden borrar despues, cuando ya no haga falta.
+function aplicarResetPendiente() {
+  const userDataPath = app.getPath('userData');
+  const rutaFlag = path.join(userDataPath, 'reset-pendiente.flag');
+  if (!fs.existsSync(rutaFlag)) return;
+
+  const dbPath = path.join(userDataPath, 'gym.db');
+  const sufijo = `antes-de-reset-${Date.now()}`;
+
+  // El -wal y el -shm se mueven con ella: dejarlos aqui haria que SQLite abriera
+  // la base nueva contra el WAL de la vieja y la corrompiera.
+  for (const sidecar of ['', '-wal', '-shm']) {
+    const origen = dbPath + sidecar;
+    if (fs.existsSync(origen)) {
+      fs.renameSync(origen, path.join(userDataPath, `gym.db.${sufijo}${sidecar}`));
+    }
+  }
+
+  fs.unlinkSync(rutaFlag);
+  console.log('Reset de fábrica aplicado. La base anterior quedó como gym.db.' + sufijo);
+}
+
 function conectar() {
   aplicarRestauracionPendiente();
+  aplicarResetPendiente();
 
   const dbPath = path.join(app.getPath('userData'), 'gym.db');
   db = new Database(dbPath);

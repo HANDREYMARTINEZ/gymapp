@@ -26,13 +26,26 @@ function ingresosDelDia(fechaLocal) {
   const db = getDb();
   const fecha = fechaLocal || hoyLocal();
 
+  // Se suma linea a linea y no ventas.total porque un mismo ticket puede llevar
+  // cosas del gimnasio y cosas que no lo son. Aqui solo cuenta lo del gimnasio:
+  // meter lo de fuera inflaria los ingresos con dinero que no es del negocio.
   const ventasPorMedio = db.prepare(`
-    SELECT metodo_pago AS medio, COUNT(*) AS n, COALESCE(SUM(total), 0) AS monto
-    FROM ventas
-    WHERE date(fecha, 'localtime') = ? AND anulada = 0
-    GROUP BY metodo_pago
+    SELECT v.metodo_pago AS medio,
+           COUNT(DISTINCT v.id) AS n,
+           COALESCE(SUM(i.cantidad * i.p_unitario), 0) AS monto
+    FROM ventas v JOIN venta_items i ON i.venta_id = v.id
+    WHERE date(v.fecha, 'localtime') = ? AND v.anulada = 0 AND i.fuera_de_caja = 0
+    GROUP BY v.metodo_pago
+    HAVING monto > 0
     ORDER BY monto DESC
   `).all(fecha);
+
+  const fueraDeCaja = db.prepare(`
+    SELECT COALESCE(SUM(i.cantidad * i.p_unitario), 0) AS monto,
+           COALESCE(SUM(i.cantidad), 0) AS unidades
+    FROM ventas v JOIN venta_items i ON i.venta_id = v.id
+    WHERE date(v.fecha, 'localtime') = ? AND v.anulada = 0 AND i.fuera_de_caja = 1
+  `).get(fecha);
 
   const membresiasPorMedio = db.prepare(`
     SELECT metodo AS medio, COUNT(*) AS n, COALESCE(SUM(monto), 0) AS monto
@@ -50,8 +63,58 @@ function ingresosDelDia(fechaLocal) {
     fecha,
     ventas: { porMedio: ventasPorMedio, total: totalVentas },
     membresias: { porMedio: membresiasPorMedio, total: totalMembresias },
+    // Aparte y sin sumar al total: es dinero que se movio en el mostrador pero
+    // no es del gimnasio.
+    fueraDeCaja: { total: fueraDeCaja.monto, unidades: fueraDeCaja.unidades },
     total: totalVentas + totalMembresias,
   };
+}
+
+// --- Que se vendio, cosa por cosa -------------------------------------------
+
+// "Tienda: $400.000" no dice si eso fue agua o proteina, y sin saberlo no se
+// puede reponer bien. Estas dos abren cada uno de los dos bloques de ingreso
+// por dentro, sin cambiar como se suman: siguen siendo las mismas dos fuentes.
+//
+// Se agrupa por producto_id y no por el nombre copiado en la linea, para que
+// renombrar un producto no parta su fila en dos. El nombre que se muestra es el
+// de la venta mas reciente: SQLite, en una consulta con MAX(), devuelve las
+// columnas sueltas de la fila que gano ese maximo.
+//
+// Y se separa dentro/fuera de caja porque son dos dineros distintos. Si un
+// producto cambio de categoria a mitad del dia, cada mitad va por su lado, que
+// es lo mismo que ya hace el arqueo.
+function productosVendidos(fechaLocal) {
+  const fecha = fechaLocal || hoyLocal();
+  return getDb().prepare(`
+    SELECT i.producto_id     AS id,
+           i.producto_nombre AS nombre,
+           i.fuera_de_caja   AS fueraDeCaja,
+           SUM(i.cantidad)                  AS unidades,
+           SUM(i.cantidad * i.p_unitario)   AS monto,
+           MAX(i.id)                        AS ultimaLinea
+    FROM venta_items i JOIN ventas v ON v.id = i.venta_id
+    WHERE date(v.fecha, 'localtime') = ? AND v.anulada = 0
+    GROUP BY i.producto_id, i.fuera_de_caja
+    ORDER BY monto DESC, nombre
+  `).all(fecha);
+}
+
+// El equivalente para el otro bloque: que planes se cobraron hoy. Se agrupa por
+// el nombre del plan copiado en la membresia, que es el que se le vendio al
+// cliente aunque el plan haya cambiado de nombre despues.
+function membresiasVendidas(fechaLocal) {
+  const fecha = fechaLocal || hoyLocal();
+  return getDb().prepare(`
+    SELECT m.plan_nombre AS nombre,
+           m.plan_tipo   AS tipo,
+           COUNT(*)                    AS pagos,
+           COALESCE(SUM(p.monto), 0)   AS monto
+    FROM pagos p JOIN membresias m ON m.id = p.membresia_id
+    WHERE date(p.fecha, 'localtime') = ? AND p.anulada = 0
+    GROUP BY m.plan_nombre, m.plan_tipo
+    ORDER BY monto DESC, nombre
+  `).all(fecha);
 }
 
 // --- Asistencias ------------------------------------------------------------
@@ -138,6 +201,12 @@ function resumen({ fecha, diasAviso = 5, diasSerie = 7 } = {}) {
   return {
     fecha: fechaLocal,
     ingresos: ingresosDelDia(fechaLocal),
+    // El detalle de las dos fuentes: que productos y que planes. Va dentro del
+    // mismo resumen para que la pantalla siga pidiendo una sola cosa.
+    vendido: {
+      productos: productosVendidos(fechaLocal),
+      membresias: membresiasVendidas(fechaLocal),
+    },
     asistenciasHoy: asistenciasDelDia(fechaLocal),
     asistenciasSerie: asistenciasUltimosDias(diasSerie),
     porVencer: membresiasPorVencer(diasAviso),
@@ -147,6 +216,6 @@ function resumen({ fecha, diasAviso = 5, diasSerie = 7 } = {}) {
 }
 
 module.exports = {
-  hoyLocal, ingresosDelDia, asistenciasDelDia, asistenciasUltimosDias,
-  membresiasPorVencer, resumen,
+  hoyLocal, ingresosDelDia, productosVendidos, membresiasVendidas,
+  asistenciasDelDia, asistenciasUltimosDias, membresiasPorVencer, resumen,
 };

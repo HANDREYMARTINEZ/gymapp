@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Miniatura from '../components/Miniatura';
 
 const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
 
@@ -19,6 +20,7 @@ function mensajeDe(r) {
 
 export default function POS({ usuarioActual }) {
   const [productos, setProductos] = useState([]);
+  const [imagenes, setImagenes] = useState({});
   const [carrito, setCarrito] = useState([]);
   const [medios, setMedios] = useState([]);
   const [metodoPago, setMetodoPago] = useState('Efectivo');
@@ -30,7 +32,11 @@ export default function POS({ usuarioActual }) {
   const buscador = useRef(null);
 
   async function cargar() {
-    setProductos(await window.api.productos.listar());
+    const lista = await window.api.productos.listar();
+    setProductos(lista);
+    // En un solo viaje, no uno por producto: la cuadricula se repinta despues de
+    // cada venta y el mostrador cobra decenas de veces al dia.
+    setImagenes(await window.api.imagenes.obtenerVarias('producto', lista.map(p => p.id)));
     setCajaAbierta(await window.api.caja.sesionAbierta() || null);
   }
 
@@ -58,6 +64,7 @@ export default function POS({ usuarioActual }) {
       return [...prev, {
         productoId: producto.id, nombre: producto.nombre,
         pUnitario: producto.p_venta, cantidad: 1, stock: producto.stock,
+        fueraDeCaja: !!producto.fuera_de_caja,
       }];
     });
   }
@@ -112,16 +119,21 @@ export default function POS({ usuarioActual }) {
   }
 
   const total = carrito.reduce((s, l) => s + l.pUnitario * l.cantidad, 0);
-  const necesitaCaja = metodoPago === 'Efectivo' && !cajaAbierta;
+  const totalFuera = carrito.filter(l => l.fueraDeCaja).reduce((s, l) => s + l.pUnitario * l.cantidad, 0);
+  const totalDentro = total - totalFuera;
+  // Un ticket entero de cosas de fuera no toca el cajon del gimnasio, asi que no
+  // hay por que exigirle una caja abierta.
+  const necesitaCaja = metodoPago === 'Efectivo' && !cajaAbierta && totalDentro > 0;
 
   return (
     <div>
-      <h1>POS</h1>
+      <h1>Vender</h1>
 
       {!cajaAbierta && (
         <p style={{ border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)', padding: 10, maxWidth: 720 }}>
-          No hay caja abierta. Puedes cobrar con tarjeta o transferencia, pero no
-          en efectivo: ábrela desde <b>Caja</b>.
+          No hay caja abierta. Puedes cobrar con tarjeta o transferencia, y también
+          en efectivo lo que sea <b>fuera de caja</b>; para el efectivo del gimnasio
+          ábrela desde <b>Caja</b>.
         </p>
       )}
 
@@ -140,31 +152,51 @@ export default function POS({ usuarioActual }) {
                  onKeyDown={e => { if (e.key === 'Enter') porEnter(); }}
                  style={{ width: '100%', padding: 6 }} />
 
-          <table style={{ marginTop: 12, borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
-                <th>Producto</th><th style={{ textAlign: 'right' }}>Precio</th>
-                <th style={{ textAlign: 'right' }}>Stock</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibles.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
-                  <td>{p.nombre}</td>
-                  <td style={{ textAlign: 'right' }}>{pesos(p.p_venta)}</td>
-                  <td style={{ textAlign: 'right', color: p.stock <= 0 ? 'var(--error)' : 'inherit' }}>{p.stock}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button onClick={() => agregar(p)} disabled={p.stock <= 0}>Agregar</button>
-                  </td>
-                </tr>
-              ))}
-              {visibles.length === 0 && (
-                <tr><td colSpan={4} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
-                  {productos.length === 0 ? 'No hay productos activos. Créalos en Inventario.' : 'Nada coincide.'}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
+          {/* 5.13: cuadricula simetrica en vez de tabla. La tarjeta entera es el
+              boton: en un mostrador se pulsa la foto del producto, no una
+              columna de "Agregar" alineada a la derecha. */}
+          <div style={{
+            marginTop: 12,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+            gap: 12,
+          }}>
+            {visibles.map(p => {
+              const agotado = p.stock <= 0;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => agregar(p)}
+                  disabled={agotado}
+                  title={p.nombre}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8,
+                    padding: 10, textAlign: 'center',
+                    background: 'var(--superficie)',
+                    border: '1px solid var(--borde-suave)',
+                    borderRadius: 'var(--radio)',
+                    opacity: agotado ? 0.45 : 1,
+                  }}
+                >
+                  <Miniatura url={imagenes[p.id]} nombre={p.nombre} lado="100%" radio="var(--radio)" fuente={30} />
+                  <div style={{ fontWeight: 600, lineHeight: 1.2 }}>{p.nombre}</div>
+                  <div style={{ fontSize: 15 }}>{pesos(p.p_venta)}</div>
+                  <div style={{ fontSize: 12, color: agotado ? 'var(--error)' : 'var(--texto-tenue)' }}>
+                    {agotado ? 'Sin existencias' : p.stock + ' en existencia'}
+                  </div>
+                  {p.fuera_de_caja ? (
+                    <div style={{ fontSize: 11, color: 'var(--aviso)' }}>Fuera de caja</div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {visibles.length === 0 && (
+            <p style={{ marginTop: 16, color: 'var(--texto-tenue)' }}>
+              {productos.length === 0 ? 'No hay productos activos. Créalos en Inventario.' : 'Nada coincide.'}
+            </p>
+          )}
         </div>
 
         <div style={{ width: 380, border: '1px solid var(--borde-fuerte)', padding: 16 }}>
@@ -177,6 +209,7 @@ export default function POS({ usuarioActual }) {
                   <td>
                     {l.nombre}
                     <br /><small style={{ color: 'var(--texto-tenue)' }}>{pesos(l.pUnitario)} c/u</small>
+                    {l.fueraDeCaja && <><br /><small style={{ color: 'var(--aviso)' }}>Fuera de caja</small></>}
                   </td>
                   <td style={{ width: 70 }}>
                     <input type="number" value={l.cantidad} min={0}
@@ -195,6 +228,13 @@ export default function POS({ usuarioActual }) {
             </tbody>
           </table>
 
+          {totalFuera > 0 && (
+            <div style={{ textAlign: 'right', fontSize: 13, color: 'var(--texto-suave)', marginTop: 8 }}>
+              <div>Del gimnasio: <b>{pesos(totalDentro)}</b></div>
+              <div style={{ color: 'var(--aviso)' }}>Fuera de caja: <b>{pesos(totalFuera)}</b></div>
+            </div>
+          )}
+
           <p style={{ fontSize: 22, textAlign: 'right', marginBottom: 6 }}><b>{pesos(total)}</b></p>
 
           <select value={metodoPago} onChange={e => { setMetodoPago(e.target.value); setError(''); }}
@@ -209,7 +249,9 @@ export default function POS({ usuarioActual }) {
             {cobrando ? 'Cobrando...' : 'Cobrar ' + pesos(total)}
           </button>
           {necesitaCaja && (
-            <small style={{ color: 'var(--error)' }}>Abre la caja para cobrar en efectivo.</small>
+            <small style={{ color: 'var(--error)' }}>
+              Hay {pesos(totalDentro)} del gimnasio en este ticket. Abre la caja para cobrarlo en efectivo.
+            </small>
           )}
           {carrito.length > 0 && (
             <button onClick={() => { setCarrito([]); setError(''); }} style={{ marginTop: 6, width: '100%' }}>

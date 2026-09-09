@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
   const [form, setForm] = useState({
     nombre: '', tipo: 'periodo', precio: '',
-    dias_duracion: '', num_tickets: '', dias_vigencia: '', color: '#3b5bdb',
+    dias_duracion: '', num_tickets: '', dias_vigencia: '', color: '#ffe500',
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export default function PlanForm({ planExistente, onGuardado, onCancelar }) {
         dias_duracion: planExistente.dias_duracion || '',
         num_tickets: planExistente.num_tickets || '',
         dias_vigencia: planExistente.dias_vigencia || '',
-        color: planExistente.color || '#3b5bdb',
+        color: planExistente.color || '#ffe500',
       });
     }
   }, [planExistente]);

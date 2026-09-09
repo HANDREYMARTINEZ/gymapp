@@ -1,24 +1,10 @@
 const { getDb } = require('../connection');
 const { format } = require('date-fns');
-const { elegirTicketeraParaConsumo } = require('../../services/membresias-logica');
+const { elegirTicketeraParaConsumo, elegirMembresiaGobernante, puedeEntrenar } = require('../../services/membresias-logica');
 const { listarPorCliente } = require('./membresias');
 
 function hoyISO() {
   return format(new Date(), 'yyyy-MM-dd');
-}
-
-function elegirMembresiaGobernante(membresias) {
-  const permiten = membresias.filter(m => m.estado === 'activa' || m.estado === 'por_vencer');
-  if (permiten.length > 0) {
-    const periodo = permiten.find(m => m.plan_tipo === 'periodo');
-    return periodo || permiten[0];
-  }
-  const ordenBloqueo = ['pausada', 'saldo_pendiente', 'vencida', 'agotada', 'anulada'];
-  for (const estado of ordenBloqueo) {
-    const m = membresias.find(x => x.estado === estado);
-    if (m) return m;
-  }
-  return null;
 }
 
 function registrar({ clienteId, metodo, registradoPor }) {
@@ -28,7 +14,7 @@ function registrar({ clienteId, metodo, registradoPor }) {
   if (!gobernante) {
     return { ok: false, motivo: 'sin_membresia' };
   }
-  if (gobernante.estado !== 'activa' && gobernante.estado !== 'por_vencer') {
+  if (!puedeEntrenar(gobernante.estado)) {
     return { ok: false, motivo: gobernante.estado };
   }
 
@@ -37,7 +23,7 @@ function registrar({ clienteId, metodo, registradoPor }) {
 
   if (gobernante.plan_tipo === 'ticketera') {
     const ticketeras = membresias.filter(m =>
-      m.plan_tipo === 'ticketera' && (m.estado === 'activa' || m.estado === 'por_vencer')
+      m.plan_tipo === 'ticketera' && puedeEntrenar(m.estado)
     );
     const elegida = elegirTicketeraParaConsumo(ticketeras);
     if (!elegida) {

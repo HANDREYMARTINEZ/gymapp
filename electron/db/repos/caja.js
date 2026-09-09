@@ -37,7 +37,9 @@ function abrir({ usuarioId, baseInicial }) {
   return { ok: true, id: info.lastInsertRowid };
 }
 
-function registrarMovimiento({ tipo, concepto, monto, usuarioId }) {
+const ORIGENES = ['venta', 'membresia', 'manual'];
+
+function registrarMovimiento({ tipo, concepto, monto, usuarioId, origen = 'manual' }) {
   if (tipo !== 'ingreso' && tipo !== 'egreso') {
     return { ok: false, motivo: 'tipo_invalido' };
   }
@@ -54,9 +56,10 @@ function registrarMovimiento({ tipo, concepto, monto, usuarioId }) {
   }
 
   const info = getDb().prepare(`
-    INSERT INTO caja_movimientos (sesion_id, tipo, concepto, monto, fecha, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(sesion.id, tipo, String(concepto).trim(), monto, new Date().toISOString(), usuarioId);
+    INSERT INTO caja_movimientos (sesion_id, tipo, concepto, monto, fecha, usuario_id, origen)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(sesion.id, tipo, String(concepto).trim(), monto, new Date().toISOString(), usuarioId,
+         ORIGENES.includes(origen) ? origen : 'manual');
 
   return { ok: true, id: info.lastInsertRowid, sesionId: sesion.id };
 }
@@ -91,11 +94,23 @@ function resumen(sesionId) {
 
   const esperado = sesion.base_inicial + totales.ingresos - totales.egresos;
 
+  // El mismo dinero, mirado por de donde viene. Lo pide 5.14 para poder ver de un
+  // vistazo cuanto del cajon es del mostrador y cuanto de las membresias, sin
+  // tener que sumar la lista de movimientos a ojo.
+  const porOrigen = db.prepare(`
+    SELECT origen,
+           COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
+           COALESCE(SUM(CASE WHEN tipo = 'egreso'  THEN monto END), 0) AS egresos
+    FROM caja_movimientos WHERE sesion_id = ?
+    GROUP BY origen
+  `).all(sesionId);
+
   return {
     sesion,
     ingresos: totales.ingresos,
     egresos: totales.egresos,
     esperado,
+    porOrigen,
     movimientos: listarMovimientos(sesionId),
   };
 }

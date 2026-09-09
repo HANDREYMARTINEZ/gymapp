@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
+import SelectorImagen from '../components/SelectorImagen';
 
 export default function ProductoForm({ productoExistente, onGuardado, onCancelar }) {
   const [form, setForm] = useState({
     nombre: '', categoria: '', p_venta: '', p_costo: '',
-    stock: '', stock_min: '', codigo_barras: '',
+    stock: '', stock_min: '', codigo_barras: '', fuera_de_caja: false,
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  // Un producto nuevo no tiene id al que colgar la imagen: se guarda aqui y se
+  // sube en cuanto crear() devuelve el id.
+  const [imagenPendiente, setImagenPendiente] = useState(null);
 
   const editando = !!productoExistente;
 
@@ -20,6 +24,7 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
         stock: '',
         stock_min: productoExistente.stock_min || '',
         codigo_barras: productoExistente.codigo_barras || '',
+        fuera_de_caja: !!productoExistente.fuera_de_caja,
       });
     }
   }, [productoExistente]);
@@ -41,12 +46,17 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
       p_costo: entero(form.p_costo),
       stock_min: entero(form.stock_min),
       codigo_barras: form.codigo_barras,
+      fuera_de_caja: form.fuera_de_caja,
     };
 
     setGuardando(true);
     const r = editando
       ? await window.api.productos.editar(productoExistente.id, datos)
       : await window.api.productos.crear({ ...datos, stock: entero(form.stock) });
+
+    if (!editando && imagenPendiente && r && r.id) {
+      await window.api.imagenes.guardar({ entidad: 'producto', entidadId: r.id, base64: imagenPendiente });
+    }
     setGuardando(false);
 
     if (r && r.ok === false) {
@@ -80,6 +90,43 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
           cada cambio quede con su motivo.
         </p>
       )}
+
+      {/* Lo que decide si el dinero de este producto es del gimnasio. Se elige
+          aqui una sola vez y no en cada venta, para que el mostrador no pueda
+          equivocarse cobrando con prisa. */}
+      <div style={{ marginTop: 14, padding: 12, border: '1px solid var(--borde-suave)', borderRadius: 'var(--radio)' }}>
+        <label style={{ display: 'block', marginBottom: 6 }}>¿El dinero de este producto es del gimnasio?</label>
+        {[
+          { valor: false, titulo: 'Dentro de caja', detalle: 'Suma a las ventas e ingresos del gimnasio y entra al arqueo.' },
+          { valor: true, titulo: 'Fuera de caja', detalle: 'Se cobra igual, pero no suma a las ventas ni al cierre de caja. Aparece en su propio resumen.' },
+        ].map(o => (
+          <label key={String(o.valor)} style={{
+            display: 'block', padding: 8, marginTop: 6, cursor: 'pointer',
+            borderRadius: 'var(--radio)',
+            border: '1px solid ' + (form.fuera_de_caja === o.valor ? 'var(--acento)' : 'var(--borde-suave)'),
+            background: form.fuera_de_caja === o.valor ? 'var(--superficie)' : 'transparent',
+          }}>
+            <input type="radio" name="destino-del-dinero" checked={form.fuera_de_caja === o.valor}
+                   onChange={() => cambiar('fuera_de_caja', o.valor)} />
+            <b style={{ marginLeft: 6 }}>{o.titulo}</b>
+            <div style={{ fontSize: 12, color: 'var(--texto-suave)', marginLeft: 24 }}>{o.detalle}</div>
+          </label>
+        ))}
+      </div>
+
+      {/* 5.13/5.15: imagen del producto, por el mismo mecanismo que las fotos de
+          cliente. Si no tiene, las pantallas dibujan sus iniciales. */}
+      {/* El id sale de productoExistente, NO de `editando`, que es un booleano:
+          `editando.id` era undefined y el selector creia que el producto aun no
+          existia. Se quedaba la imagen en memoria, no se guardaba nunca y al
+          reabrir la ficha volvia a salir vacia. */}
+      <SelectorImagen
+        entidad="producto"
+        entidadId={productoExistente ? productoExistente.id : null}
+        nombre={form.nombre}
+        etiqueta="Imagen del producto"
+        onCambio={(b64) => { if (!editando) setImagenPendiente(b64); }}
+      />
 
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 

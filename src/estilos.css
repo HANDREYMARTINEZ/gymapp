@@ -1,9 +1,18 @@
 /* ===========================================================================
    GymApp — paleta y estilos base
    ---------------------------------------------------------------------------
-   Paleta de negro a azul rey. Los colores viven aqui como variables y NO se
+   Paleta de negro a amarillo. Los colores viven aqui como variables y NO se
    escriben a mano en las pantallas: si un tono hay que ajustarlo, se cambia en
    un sitio y no en 27.
+
+   El amarillo es el color de la marca y manda: es lo interactivo, lo
+   seleccionado y lo importante. Por eso el resto de la pantalla es negro casi
+   neutro (con una pizca de calido para que el amarillo no se vea acido encima)
+   y ningun otro elemento decorativo compite con el.
+
+   Regla que no se puede romper: el amarillo es un color CLARO. Cuando hace de
+   fondo, la letra encima va oscura (--sobre-acento), nunca blanca. Al reves
+   -- amarillo como texto sobre el negro -- se usa --acento-claro.
 
    Cada color semantico tiene dos variantes, y la diferencia importa:
 
@@ -16,26 +25,27 @@
 
 :root {
   /* Superficies, de mas oscura a mas clara */
-  --fondo:            #070a14;
-  --superficie:       #0f1524;
-  --superficie-alta:  #17203a;
-  --nav-fondo:        #0a0f1e;
+  --fondo:            #0c0b08;
+  --superficie:       #16150f;
+  --superficie-alta:  #221f16;
+  --nav-fondo:        #100e0a;
 
   /* Bordes, de mas sutil a mas marcado */
-  --borde-suave:      #1c2740;
-  --borde:           #26334f;
-  --borde-fuerte:    #37476b;
+  --borde-suave:      #262318;
+  --borde:           #35301f;
+  --borde-fuerte:    #4c452c;
 
   /* Texto, de mas contraste a menos */
-  --texto:           #e6ebf7;
-  --texto-suave:     #a3b0cc;
-  --texto-tenue:     #7382a3;
+  --texto:           #f4f1e6;
+  --texto-suave:     #b6b0a0;
+  --texto-tenue:     #857f70;
 
-  /* Azul rey: lo interactivo y lo seleccionado */
-  --acento:          #3b5bdb;
-  --acento-claro:    #748ffc;
-  --acento-oscuro:   #2b4acb;
-  --sobre-acento:    #ffffff;
+  /* Amarillo: lo interactivo y lo seleccionado */
+  --acento:          #ffe500;  /* fondo de lo principal; letra oscura encima */
+  --acento-claro:    #ffee5c;  /* el amarillo como TEXTO sobre el negro */
+  --acento-oscuro:   #d6c000;  /* el mismo amarillo pisado: hover y etiquetas */
+  --acento-profundo: #6d5800;  /* oro apagado: fondo con letra clara encima */
+  --sobre-acento:    #14120a;  /* lo que se escribe ENCIMA del amarillo */
 
   /* Semanticos */
   --exito:           #51cf66;
@@ -46,18 +56,26 @@
   --error-solido:    #c92a2a;
   --error-fondo:     rgba(255, 135, 135, 0.10);
 
-  --aviso:           #ffd43b;
-  --aviso-solido:    #e8a90c;
-  --aviso-fondo:     rgba(255, 212, 59, 0.10);
+  /* El aviso era amarillo, y ahora el amarillo es la marca: si se quedara,
+     "por vencer" se confundiria con cualquier boton. Pasa a naranja, que
+     ademas deja una escala que se lee sola: verde -> naranja -> rojo. */
+  --aviso:           #ffa94d;
+  --aviso-solido:    #a34a06;
+  --aviso-fondo:     rgba(255, 169, 77, 0.10);
 
-  --neutro:          #868e96;
-  --neutro-solido:   #495057;
+  --neutro:          #9c968a;
+  --neutro-solido:   #4a463c;
 
-  /* Barras del dashboard: las de dias pasados, frente al azul de hoy */
-  --barra:           #2b3a5c;
+  /* Barras del dashboard: las de dias pasados, frente al amarillo de hoy */
+  --barra:           #4a4634;
 
   --radio:           6px;
-  --sombra:          0 2px 8px rgba(0, 0, 0, 0.45);
+  --sombra:          0 2px 8px rgba(0, 0, 0, 0.55);
+
+  /* Velo que va encima del video de fondo. Subirlo apaga el video, bajarlo lo
+     deja verse mas; es la unica perilla que hay que tocar si algun dia el
+     fondo estorba para leer. */
+  --velo-fondo:      rgba(12, 11, 8, 0.86);
 }
 
 /* --- Base ---------------------------------------------------------------- */
@@ -69,13 +87,18 @@ html, body, #root {
   margin: 0;
 }
 
+/* El color de fondo va en <html> y NO en <body>: el fondo de la raiz pinta el
+   lienzo de la pagina, que queda por debajo incluso de z-index -1. Si este
+   color siguiera en <body>, taparia el video de fondo por completo. */
+html { background: var(--fondo); }
+
 body {
   /* Sin esto el navegador usa una serif por defecto, que es de donde venia el
      aire de formulario viejo que tenia la app. */
   font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  background: var(--fondo);
+  background: transparent;
   color: var(--texto);
   -webkit-font-smoothing: antialiased;
 }
@@ -107,9 +130,12 @@ button {
   transition: background 0.12s, border-color 0.12s;
 }
 
+/* El hover pinta el boton de amarillo, asi que la letra tiene que ponerse
+   oscura en el mismo movimiento: dejarla clara la borraria del boton. */
 button:hover:not(:disabled) {
   background: var(--acento-oscuro);
   border-color: var(--acento);
+  color: var(--sobre-acento);
 }
 
 button:active:not(:disabled) { transform: translateY(1px); }
@@ -177,6 +203,63 @@ th {
 
 td { padding: 8px 8px 8px 0; }
 
-tbody tr:hover { background: rgba(59, 91, 219, 0.06); }
+tbody tr:hover { background: rgba(255, 229, 0, 0.07); }
 
 a { color: var(--acento-claro); }
+
+/* --- Video de fondo y cortina de entrada ---------------------------------- */
+
+/* Detras de toda la app. No captura el raton para que no se coma ningun clic
+   del mostrador. */
+.fondo-video {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fondo-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* El desenfoque es lo que convierte el video en ambiente: sin el, el ojo lo
+     sigue y deja de leer la pantalla. El scale tapa el borde transparente que
+     deja el propio desenfoque. */
+  filter: blur(3px) saturate(0.85);
+  transform: scale(1.06);
+}
+
+.fondo-video-velo {
+  position: absolute;
+  inset: 0;
+  background: var(--velo-fondo);
+}
+
+/* La cortina cubre la ventana entera, por encima de cualquier cosa. */
+.pantalla-carga {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+/* 'contain' y no 'cover': el video es cuadrado y la ventana apaisada, asi que
+   recortarlo se comeria parte de la animacion de la marca. */
+.pantalla-carga video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pantalla-carga-saltar {
+  position: absolute;
+  bottom: 22px;
+  right: 26px;
+  font-size: 12px;
+  color: var(--texto-tenue);
+  opacity: 0.55;
+}
