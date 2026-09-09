@@ -259,7 +259,15 @@ app.whenReady().then(async () => {
       path.join(__dirname, '..', 'electron', 'db', 'migrations', '010_colores_planes_distintos.sql'), 'utf-8');
     // Con el espacio detras a proposito: asi se llama en la base de Andrey, y
     // comparando el nombre tal cual se quedaba fuera del reparto en silencio.
-    const dia = planes.crear({ nombre: 'Dia ', tipo: 'periodo', precio: 8000, dias_duracion: 1, color: '#3b5bdb' });
+    //
+    // Se mete por SQL directo y no con planes.crear() porque desde el 08-sep-2026
+    // crear() recorta el nombre: por la puerta de la app ya no entra un "Dia ".
+    // Lo que esto representa es una fila HEREDADA, de las que la importacion dejo
+    // en la base antes de aquel cambio, y esas siguen ahi.
+    const dia = planes.crear({ nombre: 'Dia', tipo: 'periodo', precio: 8000, dias_duracion: 1, color: '#3b5bdb' });
+    db.prepare(`UPDATE planes SET nombre = 'Dia ' WHERE id = ?`).run(dia);
+    check('el nombre sucio se queda tal cual cuando entra por SQL, no por crear()',
+          planes.obtenerPorId(dia).nombre === 'Dia ', JSON.stringify(planes.obtenerPorId(dia).nombre));
     const paquete = planes.crear({ nombre: 'Paquete 10 clases', tipo: 'ticketera', precio: 90000, num_tickets: 10, color: '#3b5bdb' });
     const veinte = planes.crear({ nombre: '20 dias tickets', tipo: 'ticketera', precio: 150000, num_tickets: 20, color: '#3b5bdb' });
     const diaSinColor = planes.crear({ nombre: 'Dia', tipo: 'periodo', precio: 8000, dias_duracion: 1 });
@@ -277,6 +285,100 @@ app.whenReady().then(async () => {
           colorDe(diaSinColor) === null, String(colorDe(diaSinColor)));
     check('y el color elegido a mano sigue intacto tras las dos migraciones',
           planes.obtenerPorId(aMano).color === '#ff0059');
+
+    // ---- Fase 2: el catalogo con lo que cuelga de cada plan ---------------
+    // Renombrar o desactivar un plan a ciegas es lo que da miedo. listarTodos()
+    // ahora dice cuanta gente lo esta usando HOY, cuanta lo uso alguna vez, y
+    // cuales son el mismo plan escrito de otra forma.
+    check('crear() recorta el nombre: por la app ya no entra un "Dia "',
+          planes.obtenerPorId(
+            planes.crear({ nombre: '  Trimestral  ', tipo: 'periodo', precio: 180000, dias_duracion: 90 })
+          ).nombre === 'Trimestral');
+
+    const conUso = planes.listarTodos();
+    const porNombre = (n) => conUso.find(p => p.nombre === n);
+
+    // 'Mensual' es el plan del principio de la suite: por el han pasado varias
+    // membresias, unas vivas y otras vencidas a proposito.
+    const mensualFila = conUso.find(p => p.id === mensual);
+    check('cada plan viene con su historico de membresias',
+          mensualFila.membresiasHistorico > 0, 'historico=' + mensualFila.membresiasHistorico);
+    // La distincion que da todo el valor: "en uso" no es "vendidas alguna vez".
+    // Un plan por el que pasaron dos personas y las dos ya vencieron se puede
+    // desactivar tranquilamente; uno con gente dentro, no. Se prueba con un plan
+    // recien hecho para que no dependa del estado en que dejo la suite a los
+    // demas.
+    const viejo = planes.crear({ nombre: 'Promo agotada', tipo: 'periodo', precio: 5000, dias_duracion: 1 });
+    const carlos = clientes.crear({ documento: '901', nombre: 'Carlos', telefono: '302' });
+    const dina = clientes.crear({ documento: '902', nombre: 'Dina', telefono: '303' });
+    for (const quien of [carlos, dina]) {
+      const id = membresias.vender({ clienteId: quien, planId: viejo, usuarioId, fInicio: haceDias(30) });
+      membresias.registrarPago({ membresiaId: id, monto: 5000, metodo: 'Efectivo', usuarioId });
+    }
+    const filaVieja = planes.listarTodos().find(p => p.id === viejo);
+    check('un plan que vendio dos veces y cuyas dos membresias vencieron sale 0 en uso',
+          filaVieja.membresiasEnUso === 0 && filaVieja.membresiasHistorico === 2,
+          filaVieja.membresiasEnUso + ' en uso / ' + filaVieja.membresiasHistorico + ' vendidas');
+
+    // Y en cuanto una de las dos vuelve a estar vigente, el numero sube.
+    const suya = db.prepare(`SELECT id FROM membresias WHERE plan_id = ? LIMIT 1`).get(viejo).id;
+    db.prepare(`UPDATE membresias SET f_fin = ? WHERE id = ?`).run(enDias(10), suya);
+    check('y en cuanto una vuelve a estar vigente, "en uso" pasa a 1',
+          planes.listarTodos().find(p => p.id === viejo).membresiasEnUso === 1,
+          'enUso=' + planes.listarTodos().find(p => p.id === viejo).membresiasEnUso);
+    check('y con la fecha de la ultima que se vendio',
+          /^\d{4}-\d{2}-\d{2}$/.test(mensualFila.ultimaVenta || ''), String(mensualFila.ultimaVenta));
+
+    check('un plan que no ha vendido nunca sale en cero, no sin dato',
+          porNombre('Trimestral').membresiasHistorico === 0 &&
+          porNombre('Trimestral').membresiasEnUso === 0 &&
+          porNombre('Trimestral').ultimaVenta === null);
+
+    // Los dos avisos que hacen falta para limpiar el catalogo.
+    check('senala el nombre con espacios sueltos, que en pantalla no se ven',
+          porNombre('Dia ').nombreConEspacios === true &&
+          porNombre('Dia').nombreConEspacios === false);
+    check('y agrupa los que son el mismo plan escrito de otra forma',
+          porNombre('Dia ').gemelos.includes(porNombre('Dia').id) &&
+          porNombre('Dia').gemelos.includes(porNombre('Dia ').id),
+          JSON.stringify([porNombre('Dia ').gemelos, porNombre('Dia').gemelos]));
+    check('un plan con nombre unico no tiene gemelos',
+          porNombre('Trimestral').gemelos.length === 0 &&
+          conUso.find(p => p.id === mensual).gemelos.length === 0);
+
+    // Las tildes tambien: "Dia" y "Día" son el mismo plan para quien lo lee, y
+    // la importacion del Excel nuevo metio la version con tilde al lado de la
+    // que ya estaba sin ella.
+    const conTilde = planes.crear({ nombre: 'Día', tipo: 'periodo', precio: 8000, dias_duracion: 1 });
+    const trasTilde = planes.listarTodos();
+    check('"Día" con tilde se agrupa con los "Dia" que ya estaban',
+          trasTilde.find(p => p.id === conTilde).gemelos.length === 2,
+          'gemelos=' + trasTilde.find(p => p.id === conTilde).gemelos.length);
+
+    // Desactivar no toca lo vendido: es lo que hace que limpiar el catalogo sea
+    // seguro, y por eso se comprueba aqui y no de palabra.
+    const antesDeDesactivar = trasTilde.find(p => p.id === mensual).membresiasHistorico;
+    planes.desactivar(mensual);
+    const trasDesactivar = planes.listarTodos().find(p => p.id === mensual);
+    check('desactivar un plan no borra ni una de sus membresias',
+          trasDesactivar.membresiasHistorico === antesDeDesactivar,
+          antesDeDesactivar + ' -> ' + trasDesactivar.membresiasHistorico);
+    check('el plan desactivado sigue saliendo en el catalogo, marcado como inactivo',
+          trasDesactivar.activo === 0);
+    planes.activar(mensual);
+
+    // Renombrar tampoco: la membresia guarda copiado el nombre del dia en que se
+    // vendio, y es lo que sale en el historial y en el Excel.
+    const nombreEnMembresia = db.prepare(
+      `SELECT plan_nombre FROM membresias WHERE plan_id = ? LIMIT 1`).get(mensual).plan_nombre;
+    planes.editar(mensual, { nombre: '  Mensual renombrado  ', precio: 70000,
+                             dias_duracion: 30, num_tickets: null, dias_vigencia: null, color: null });
+    check('editar tambien recorta el nombre',
+          planes.obtenerPorId(mensual).nombre === 'Mensual renombrado',
+          JSON.stringify(planes.obtenerPorId(mensual).nombre));
+    check('y renombrar el plan no cambia el nombre que guardo la membresia vendida',
+          db.prepare(`SELECT plan_nombre FROM membresias WHERE plan_id = ? LIMIT 1`).get(mensual)
+            .plan_nombre === nombreEnMembresia, nombreEnMembresia);
 
     db.close();
   } catch (e) {
