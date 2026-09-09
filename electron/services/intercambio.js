@@ -261,7 +261,14 @@ function planPara(fila, cache, avisos) {
   if (cache.has(nombre)) return cache.get(nombre);
 
   const db = getDb();
-  let plan = db.prepare(`SELECT * FROM planes WHERE nombre = ?`).get(nombre);
+  // Primero el nombre clavado y solo despues el recortado. El catalogo de hoy
+  // arrastra del Excel nombres con espacio al final ("Dia ", "Anual "), y las
+  // celdas se leen ya recortadas por texto(): sin la segunda consulta, exportar
+  // e importar el propio archivo de la app inventaria un plan "Dia" nuevo al lado
+  // del "Dia " que ya existe. El orden importa -- si hubiera los dos, gana el que
+  // se escribe igual que la celda.
+  let plan = db.prepare(`SELECT * FROM planes WHERE nombre = ?`).get(nombre)
+          || db.prepare(`SELECT * FROM planes WHERE TRIM(nombre) = ? ORDER BY id`).get(nombre);
 
   if (!plan) {
     const precio = fila.totalPago + fila.saldoRestante;
@@ -376,9 +383,15 @@ async function importarExcel(ruta, { usuarioId } = {}) {
         // Una membresia que ya esta no se duplica. Se reconoce por cliente, plan
         // y fecha de inicio: es lo que hace que reimportar el mismo archivo dos
         // veces no acabe con todo por duplicado.
+        //
+        // El nombre del plan se compara recortado por los dos lados. La celda
+        // llega ya sin espacios (texto() la recorta) y la membresia guarda el
+        // nombre tal cual estaba el dia que se vendio, espacio final incluido:
+        // comparando en crudo, todo cliente con un plan "Dia " se duplicaba --
+        // membresia y pago -- cada vez que se reimportara la hoja exportada.
         const yaEsta = db.prepare(`
           SELECT id FROM membresias
-          WHERE cliente_id = ? AND plan_nombre = ? AND f_inicio = ? AND anulada = 0
+          WHERE cliente_id = ? AND TRIM(plan_nombre) = ? AND f_inicio = ? AND anulada = 0
         `).get(clienteId, fila.tipoMembresia, fila.fInicio);
         if (yaEsta) { resultado.membresiasOmitidas++; return; }
 

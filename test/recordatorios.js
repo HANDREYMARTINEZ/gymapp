@@ -134,6 +134,44 @@ app.whenReady().then(async () => {
     check('si se apagan los "por vencer", solo quedan los vencidos',
           lista.porEnviar.length === 1 && lista.porEnviar[0].tipo === 'vencida');
 
+    // ---- El censo de correos ---------------------------------------------
+    // Distinto de destinatarios(): no responde "a quien le toca hoy" sino
+    // "cuantos correos me faltan por conseguir". Cuenta a TODOS los activos,
+    // tambien al que esta al dia y por tanto no recibe nada esta semana.
+    const censo = recordatorios.censoCorreos();
+    check('el censo cuenta a todos los clientes activos, no solo a los avisables',
+          censo.total === 7, 'total=' + censo.total);
+    check('y separa los que tienen un correo utilizable de los que no',
+          censo.utilizables === 3 && censo.porConseguir === 4,
+          'utilizables=' + censo.utilizables + ' faltan=' + censo.porConseguir);
+    check('el que esta al dia cuenta en el censo aunque hoy no reciba nada',
+          censo.utilizables === 3 && !lista.porEnviar.some(d => d.nombre === 'Al Dia'));
+    check('cada correo que no sirve cae en su cesta',
+          censo.vacio.length === 1 && censo.dominio_de_ejemplo.length === 1 &&
+          censo.con_tildes.length === 1 && censo.mal_escrito.length === 1,
+          [censo.vacio.length, censo.dominio_de_ejemplo.length,
+           censo.con_tildes.length, censo.mal_escrito.length].join('/'));
+    check('y cada uno viene con lo que hace falta para ir a buscarlo',
+          censo.vacio[0].nombre === 'Vencido Sin Correo' &&
+          censo.vacio[0].documento === '4' && censo.vacio[0].telefono === '3001112233',
+          JSON.stringify(censo.vacio[0]));
+    check('el censo usa el mismo criterio que la ronda: el @example.com no cuenta',
+          censo.dominio_de_ejemplo[0].email === 'alguien@example.com');
+
+    // Un cliente dado de baja no es un correo que haya que salir a conseguir.
+    db.prepare('UPDATE clientes SET activo = 0 WHERE documento = ?').run('7');
+    check('un cliente inactivo sale del censo entero',
+          recordatorios.censoCorreos().total === 6 &&
+          recordatorios.censoCorreos().mal_escrito.length === 0);
+    db.prepare('UPDATE clientes SET activo = 1 WHERE documento = ?').run('7');
+
+    // Lo que va a pasar cuando Andrey rellene la hoja: el numero sube solo.
+    db.prepare('UPDATE clientes SET email = ? WHERE documento = ?').run('real@gmail.com', '5');
+    check('al reemplazar un correo de ejemplo por uno real, el censo sube',
+          recordatorios.censoCorreos().utilizables === 4 &&
+          recordatorios.censoCorreos().dominio_de_ejemplo.length === 0);
+    db.prepare('UPDATE clientes SET email = ? WHERE documento = ?').run('alguien@example.com', '5');
+
     // ---- La coletilla de la baja, fuera ----------------------------------
     check('las plantillas por defecto ya no llevan la frase de la baja',
           !recordatorios.DEFECTOS.recordatorios_cuerpo_vencida.includes('BAJA') &&

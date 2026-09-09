@@ -21,10 +21,18 @@ function textoDeFallo(r) {
 }
 
 const MOTIVOS_CORREO = {
+  vacio: 'no tiene correo',
   dominio_de_ejemplo: 'dominio de ejemplo, no existe',
   con_tildes: 'lleva tildes o eñes',
   mal_escrito: 'no tiene forma de correo',
 };
+
+// Las cuatro cestas del censo, en el orden en que conviene atacarlas.
+const FALLOS_CENSO = ['vacio', 'dominio_de_ejemplo', 'mal_escrito', 'con_tildes'];
+
+function faltantesDelCenso(censo) {
+  return FALLOS_CENSO.flatMap(motivo => (censo[motivo] || []).map(c => ({ ...c, motivo })));
+}
 
 function formatearTamano(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -61,6 +69,8 @@ export default function Configuracion({ usuarioActual }) {
   // Recordatorios de vencimiento por correo
   const [rec, setRec] = useState(null);
   const [recResumen, setRecResumen] = useState(null);
+  const [censo, setCenso] = useState(null);
+  const [verSinCorreo, setVerSinCorreo] = useState(false);
   const [recProxima, setRecProxima] = useState('');
   const [passCorreo, setPassCorreo] = useState('');
   const [verPlantillas, setVerPlantillas] = useState(false);
@@ -86,7 +96,7 @@ export default function Configuracion({ usuarioActual }) {
 
   async function cargarRecordatorios() {
     const r = await window.api.recordatorios.estado();
-    if (r.ok) { setRec(r.config); setRecResumen(r.resumen); setRecProxima(r.proxima); }
+    if (r.ok) { setRec(r.config); setRecResumen(r.resumen); setRecProxima(r.proxima); setCenso(r.censo); }
   }
 
   useEffect(() => { cargarDatos(); cargarRespaldos(); cargarRecordatorios(); }, []);
@@ -169,6 +179,9 @@ export default function Configuracion({ usuarioActual }) {
     setPorImportar(null);
     setResultadoImport(r);
     cargarRespaldos();
+    // Importar es justamente lo que hace subir el censo: se vuelve a contar sin
+    // que haya que recargar la pantalla, que es como se ve si la hoja sirvio.
+    cargarRecordatorios();
   }
 
   const cambiarRec = (campo) => (valor) => setRec(r => ({ ...r, [campo]: valor }));
@@ -317,6 +330,66 @@ export default function Configuracion({ usuarioActual }) {
           el archivo</b> &mdash; es la clave del cliente para el kiosco y se asigna
           aquí, no en una hoja de cálculo.
         </p>
+
+        {/* El censo de correos. Los recordatorios de vencimiento están hechos y
+            probados, pero hoy no le llegan a nadie porque la importación metió
+            direcciones @example.com inventadas. Esto responde de un vistazo a
+            "¿cuántos correos me faltan por conseguir?", que antes había que
+            mirar cliente a cliente. El camino: exportar, rellenar la columna
+            Correo, volver a importar — el importador reconoce a cada cliente por
+            su documento y actualiza, no duplica. */}
+        {censo && (
+          <div style={{ marginBottom: 14, padding: 14, maxWidth: 640,
+                        borderRadius: 'var(--radio)',
+                        border: '1px solid ' + (censo.porConseguir > 0 ? 'var(--aviso)' : 'var(--exito)'),
+                        background: censo.porConseguir > 0 ? 'var(--aviso-fondo)' : 'transparent' }}>
+            <b>Correos: {censo.utilizables} de {censo.total} clientes activos</b>
+            {' '}se pueden avisar por correo.
+            {censo.porConseguir > 0 ? (
+              <>
+                <div style={{ marginTop: 6 }}>
+                  Faltan <b>{censo.porConseguir}</b>. Se arreglan sin escribirlos uno a uno:
+                  exporta a Excel, rellena la columna <b>Correo</b> y vuelve a importar
+                  esa misma hoja — cada cliente se reconoce por su documento, así que
+                  se actualiza y no se duplica.
+                </div>
+                <div style={{ marginTop: 6, color: 'var(--texto-suave)' }}>
+                  {FALLOS_CENSO
+                    .filter(m => (censo[m] || []).length > 0)
+                    .map(m => censo[m].length + ' ' + MOTIVOS_CORREO[m])
+                    .join(' · ')}
+                </div>
+                <button onClick={() => setVerSinCorreo(v => !v)} style={{ marginTop: 10 }}>
+                  {verSinCorreo ? 'Ocultar la lista' : 'Ver quiénes son'}
+                </button>
+                {verSinCorreo && (
+                  <div style={{ marginTop: 10, maxHeight: 260, overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <tbody>
+                        {faltantesDelCenso(censo).map(c => (
+                          <tr key={c.clienteId}>
+                            <td style={{ padding: '3px 6px 3px 0' }}>{c.nombre}</td>
+                            <td style={{ padding: '3px 6px', color: 'var(--texto-tenue)' }}>{c.documento}</td>
+                            <td style={{ padding: '3px 6px', color: 'var(--texto-suave)' }}>
+                              {c.email || '—'}
+                            </td>
+                            <td style={{ padding: '3px 0', color: 'var(--aviso)' }}>
+                              {MOTIVOS_CORREO[c.motivo]}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ marginTop: 6, color: 'var(--texto-suave)' }}>
+                Ninguno queda fuera de los recordatorios por culpa del correo.
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={exportar('xlsx')} disabled={!!trabajando}>
@@ -545,6 +618,17 @@ export default function Configuracion({ usuarioActual }) {
                   {recResumen.sinCorreo > 0 && (
                     <div style={{ color: 'var(--aviso)', marginTop: 6 }}>
                       {'\u26A0'} {recResumen.sinCorreo} no tienen correo: a esos hay que llamarlos.
+                    </div>
+                  )}
+                  {/* Los dos numeros de arriba son de la ronda de hoy. Este es el
+                      del gimnasio entero, y es el que dice si esta pantalla sirve
+                      de algo: con 0 correos utilizables, la ronda no le llega a
+                      nadie por muy bien configurada que este. */}
+                  {censo && censo.porConseguir > 0 && (
+                    <div style={{ color: 'var(--texto-tenue)', marginTop: 6 }}>
+                      En total, {censo.utilizables} de {censo.total} clientes tienen un
+                      correo al que se pueda escribir. Los otros {censo.porConseguir} se
+                      arreglan desde <b>Clientes: exportar e importar</b>, más arriba.
                     </div>
                   )}
 

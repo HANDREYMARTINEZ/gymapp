@@ -284,6 +284,41 @@ function destinatarios({ incluyePorVencer = true, cadaDias = 15 } = {}) {
   };
 }
 
+// Cuantos clientes tienen un correo al que de verdad se le pueda escribir, sobre
+// TODOS los activos y no solo sobre los que hoy toca avisar.
+//
+// destinatarios() mira unicamente a quien tiene la membresia vencida o por
+// vencer: sirve para la ronda, pero no responde a "cuantos correos me quedan por
+// conseguir", que es lo que hay que saber ANTES de salir a pedirlos. Hasta ahora
+// eso habia que mirarlo cliente a cliente en la lista.
+//
+// El criterio es el mismo revisarCorreo() que decide si se manda o no, para que
+// el numero de aqui y el de la ronda no puedan discrepar.
+function censoCorreos() {
+  const db = getDb();
+  const clientes = db.prepare(`
+    SELECT id, documento, nombre, email, telefono FROM clientes WHERE activo = 1 ORDER BY nombre
+  `).all();
+
+  const censo = {
+    total: clientes.length,
+    utilizables: 0,
+    vacio: [], dominio_de_ejemplo: [], mal_escrito: [], con_tildes: [],
+  };
+
+  for (const c of clientes) {
+    const problema = revisarCorreo(c.email);
+    if (!problema) { censo.utilizables++; continue; }
+    censo[problema].push({
+      clienteId: c.id, documento: c.documento, nombre: c.nombre,
+      email: String(c.email || '').trim(), telefono: c.telefono,
+    });
+  }
+
+  censo.porConseguir = censo.total - censo.utilizables;
+  return censo;
+}
+
 function rellenar(plantilla, destino, gimnasio) {
   return String(plantilla || '')
     .replace(/\{nombre\}/g, destino.nombre)
@@ -484,7 +519,7 @@ function pararProgramador() {
 
 module.exports = {
   DEFECTOS, PAUSA_MS, DOMINIOS_FALSOS, revisarCorreo,
-  leerConfig, guardarConfig, destinatarios, enviarRonda, enviarPrueba,
+  leerConfig, guardarConfig, destinatarios, censoCorreos, enviarRonda, enviarPrueba,
   historial, tocaRonda, proximaRonda, diasDesdeUltimaRonda,
   componerMensaje, vistaPrevia, datosGimnasio, logoDelGimnasio,
   iniciarProgramador, pararProgramador, revisar, rellenar,

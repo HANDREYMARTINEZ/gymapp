@@ -9,6 +9,11 @@ ipcMain.handle('recordatorios:estado', () => {
     ok: true,
     config,
     proxima: recordatorios.proximaRonda(config),
+    // El censo va aqui dentro y no en un canal aparte porque la pantalla de
+    // Configuracion ya llama a este al abrirse, y el numero hace falta en dos
+    // sitios de ella: junto a exportar/importar (donde se consiguen los correos)
+    // y junto a los recordatorios (donde se usan).
+    censo: recordatorios.censoCorreos(),
     resumen: {
       porEnviar: lista.porEnviar.length,
       vencidas: lista.porEnviar.filter(d => d.tipo === 'vencida').length,

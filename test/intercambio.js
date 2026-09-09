@@ -138,33 +138,105 @@ app.whenReady().then(async () => {
           caja.resumen(caja.sesionAbierta().id).esperado === cajaAntes,
           cajaAntes + ' -> ' + caja.resumen(caja.sesionAbierta().id).esperado);
 
+    const contar = (tabla) => db.prepare('SELECT COUNT(*) AS n FROM ' + tabla).get().n;
+
+    // ------------------------------- rellenar solo los correos (fase 1.1)
+    // Es el camino que va a seguir Andrey con los 59 clientes importados, que
+    // hoy tienen direcciones @example.com inventadas: exportar, escribir la
+    // columna Correo y volver a importar la misma hoja. Lo que no puede pasar
+    // es que de paso se duplique una membresia o un pago.
+    const rutaCorreos = path.join(testDir, 'correos.xlsx');
+    await inter.exportarExcel(rutaCorreos);
+    const wbC = new ExcelJS.Workbook();
+    await wbC.xlsx.readFile(rutaCorreos);
+    const wsC = wbC.getWorksheet('Clientes');
+    const colCorreo = inter.COLUMNAS.findIndex(c => c.clave === 'correo') + 1;
+    for (let n = 2; n <= wsC.rowCount; n++) {
+      wsC.getRow(n).getCell(colCorreo).value = 'cliente' + n + '@gimnasio.com';
+    }
+    await wbC.xlsx.writeFile(rutaCorreos);
+
+    const memAntes = contar('membresias');
+    const pagosAntes = contar('pagos');
+    // Todo menos el correo, que es justo lo que se quiere cambiar.
+    const sinElCorreo = (filas) => JSON.stringify(filas.map(f => ({ ...f, correo: '' })));
+    const restoAntes = sinElCorreo(inter.filasParaExportar());
+
+    const soloCorreos = await inter.importarExcel(rutaCorreos, { usuarioId });
+    check('escribir solo la columna Correo no crea ni una membresia',
+          soloCorreos.membresiasCreadas === 0 && contar('membresias') === memAntes,
+          'creadas=' + soloCorreos.membresiasCreadas + ' total=' + contar('membresias'));
+    check('ni un pago: el dinero no se vuelve a apuntar',
+          contar('pagos') === pagosAntes, pagosAntes + ' -> ' + contar('pagos'));
+    check('los clientes se actualizan, no se duplican',
+          soloCorreos.clientesCreados === 0 && soloCorreos.clientesActualizados === 3,
+          'creados=' + soloCorreos.clientesCreados);
+    check('el correo nuevo si queda escrito',
+          db.prepare(`SELECT email FROM clientes WHERE documento = '1020304050'`).get().email
+            === 'cliente2@gimnasio.com',
+          db.prepare(`SELECT email FROM clientes WHERE documento = '1020304050'`).get().email);
+    check('y todo lo demas de cada fila queda exactamente igual',
+          sinElCorreo(inter.filasParaExportar()) === restoAntes);
+
+    // ----------------------- un plan con espacio al final no duplica nada
+    // El catalogo real arrastra del Excel del gimnasio nombres como "Dia " y
+    // "Anual ". Las celdas se leen ya recortadas, asi que comparando en crudo la
+    // membresia no se reconocia y cada reimportacion duplicaba membresia Y pago
+    // de todo cliente de esos planes -- justo la operacion de la fase 1.1.
+    const anual = planes.crear({ nombre: 'Anual ', tipo: 'periodo', precio: 500000, dias_duracion: 365 });
+    const dina = clientes.crear({ documento: '7070707070', nombre: 'Dina Espacio', telefono: '3004445566' });
+    const mDina = membresias.vender({ clienteId: dina, planId: anual, usuarioId, fInicio: hace(20) });
+    membresias.registrarPago({ membresiaId: mDina, monto: 500000, metodo: 'Efectivo', usuarioId });
+
+    const rutaEspacio = path.join(testDir, 'espacio.xlsx');
+    await inter.exportarExcel(rutaEspacio);
+    const planesAntesEsp = contar('planes');
+    const memAntesEsp = contar('membresias');
+    const pagosAntesEsp = contar('pagos');
+
+    const espacio = await inter.importarExcel(rutaEspacio, { usuarioId });
+    check('un plan con espacio al final no duplica la membresia al reimportar',
+          contar('membresias') === memAntesEsp && espacio.membresiasCreadas === 0,
+          'creadas=' + espacio.membresiasCreadas + ' total=' + contar('membresias'));
+    check('ni duplica el pago de esa membresia',
+          contar('pagos') === pagosAntesEsp, pagosAntesEsp + ' -> ' + contar('pagos'));
+    check('ni inventa un plan gemelo sin el espacio',
+          contar('planes') === planesAntesEsp && espacio.planesCreados === 0,
+          'planes=' + contar('planes'));
+
     // ------------------------------------------------------------- el archivo real
-    const real = 'F:/gymapp V2/Membresias GYM - 50 clientes actualizado.xlsx';
+    // El 08-sep-2026 (noche) el archivo del gimnasio cambió: el viejo
+    // ("Membresias GYM - 50 clientes actualizado.xlsx") no traía la columna
+    // Documento y se rechazaba entero; el nuevo ya la trae y sale de la propia
+    // app. Este bloque solo LEE -- importarlo aquí metería sus 109 clientes y
+    // sus 6 planes en medio de la suite y ensuciaría las comprobaciones de más
+    // abajo. Quien prueba la importación de un archivo de este tamaño es
+    // test/ensayo-correos.js.
+    const real = 'F:/gymapp V2/Clientes GymApp listo para importar (109).xlsx';
     if (fs.existsSync(real)) {
       const lectura = await inter.leerFilas(real);
-      check('el archivo real de Andrey se lee', lectura.ok === true, 'motivo=' + lectura.motivo);
+      check('el archivo real del gimnasio se lee', lectura.ok === true, 'motivo=' + lectura.motivo);
       if (lectura.ok) {
-        // 49 clientes reales, filas 2 a 50. La 51 solo tiene "Activo" y un 0
-        // sueltos, y el resto de la hoja son mil filas vacias: todo eso se salta.
-        check('lee los 49 clientes y descarta el resto de la hoja',
-              lectura.filas.length === 49, 'filas=' + lectura.filas.length);
-        const santiago = lectura.filas[0];
+        check('lee los 109 clientes y descarta el resto de la hoja',
+              lectura.filas.length === 109, 'filas=' + lectura.filas.length);
+        check('el archivo nuevo SÍ trae la columna Documento, y rellena en todas las filas',
+              !!lectura.mapa.documento && lectura.filas.every(f => !!f.documento),
+              'sin documento=' + lectura.filas.filter(f => !f.documento).length);
+        const primera = lectura.filas[0];
         check('lee bien los nombres con tilde',
-              lectura.filas.some(f => f.nombre.includes('Andrés')),
-              'primero=' + santiago.nombre);
-        check('lee bien las fechas', santiago.fInicio === '2026-08-24', 'inicio=' + santiago.fInicio);
+              lectura.filas.some(f => f.nombre.includes('Andrés')), 'primera=' + primera.nombre);
+        check('lee bien las fechas', primera.fInicio === '2026-08-24', 'inicio=' + primera.fInicio);
         check('lee bien los importes',
-              santiago.totalPago === 60000 && santiago.saldoRestante === 10000,
-              santiago.totalPago + '/' + santiago.saldoRestante);
-        check('y avisa de que a ese archivo le falta el documento',
-              lectura.filas.every(f => !f.documento));
+              primera.totalPago === 60000 && primera.saldoRestante === 10000,
+              primera.totalPago + '/' + primera.saldoRestante);
 
-        const conReal = await inter.importarExcel(real, { usuarioId });
-        check('el archivo viejo se rechaza entero por no traer Documento',
-              conReal.ok === false && conReal.motivo === 'falta_columna_documento',
-              'motivo=' + conReal.motivo);
-        check('y no crea ni un solo cliente a ciegas',
-              !db.prepare(`SELECT 1 FROM clientes WHERE documento IS NULL`).get());
+        // Lo que rompía la reimportación: nombres de plan con espacios sueltos.
+        // Este archivo está limpio; si un día deja de estarlo, aquí se ve antes
+        // de que duplique membresías en la base de verdad.
+        const planesDelArchivo = [...new Set(lectura.filas.map(f => f.tipoMembresia))].filter(Boolean);
+        check('los 6 planes que pide vienen sin espacios sueltos en el nombre',
+              planesDelArchivo.length === 6 && planesDelArchivo.every(n => n === n.trim()),
+              JSON.stringify(planesDelArchivo));
       }
     } else {
       log('  (el archivo real no está en su sitio, se omite esa parte)');
