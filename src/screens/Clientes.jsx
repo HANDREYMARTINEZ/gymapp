@@ -68,6 +68,8 @@ export default function Clientes({ usuarioActual }) {
   const [motivoPausa, setMotivoPausa] = useState('');
   const [vendiendoA, setVendiendoA] = useState(null);
   const [pagandoMembresia, setPagandoMembresia] = useState(null);
+  const [dadosDeBaja, setDadosDeBaja] = useState([]);
+  const [verBajas, setVerBajas] = useState(false);
 
   const buscar = useCallback(async (texto) => {
     setResultados(await window.api.clientes.buscarConEstado(texto));
@@ -77,9 +79,20 @@ export default function Clientes({ usuarioActual }) {
     setLateral(await window.api.clientes.panelLateral());
   }, []);
 
+  const recargarBajas = useCallback(async () => {
+    setDadosDeBaja(await window.api.clientes.listarDadosDeBaja());
+  }, []);
+
   useEffect(() => {
-    if (modo === 'lista') { buscar(query); recargarLateral(); }
+    if (modo === 'lista') { buscar(query); recargarLateral(); recargarBajas(); }
   }, [modo]);
+
+  async function darDeAlta(id) {
+    await window.api.clientes.reactivar({
+      clienteId: id, usuarioId: usuarioActual ? usuarioActual.id : null,
+    });
+    await Promise.all([buscar(query), recargarLateral(), recargarBajas()]);
+  }
 
   async function alEscribir(texto) {
     setQuery(texto);
@@ -171,6 +184,39 @@ export default function Clientes({ usuarioActual }) {
             />
             <button onClick={() => setModo('nuevo')}>+ Nuevo cliente</button>
           </div>
+
+          {/* Sin esto, dar de baja seria una puerta de un solo sentido: el
+              cliente desaparece del buscador y ya no habria forma de encontrarlo
+              para deshacerlo. El boton solo aparece si hay alguno. */}
+          {dadosDeBaja.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <button onClick={() => setVerBajas(v => !v)}>
+                {verBajas ? 'Ocultar' : 'Ver'} los {dadosDeBaja.length} dados de baja
+              </button>
+
+              {verBajas && (
+                <div style={{ marginTop: 8, border: '1px solid var(--borde-suave)',
+                              borderRadius: 'var(--radio)', padding: 10 }}>
+                  {dadosDeBaja.map(c => (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between',
+                                             alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                      <div style={{ cursor: 'pointer', minWidth: 0 }} onClick={() => abrirFicha(c.id)}>
+                        <b style={{ color: 'var(--texto-suave)' }}>{c.nombre}</b>
+                        <div style={{ fontSize: 12, color: 'var(--texto-tenue)' }}>
+                          {c.documento || 'sin documento'}
+                          {c.fechaBaja && <> · baja el {c.fechaBaja.slice(0, 10)}</>}
+                          {c.motivo && <> · {c.motivo}</>}
+                        </div>
+                      </div>
+                      <button onClick={() => darDeAlta(c.id)} style={{ flexShrink: 0 }}>
+                        Dar de alta
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {resultados.length === 0 && (
             <p style={{ color: 'var(--texto-tenue)' }}>

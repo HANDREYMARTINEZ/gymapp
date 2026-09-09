@@ -47,6 +47,28 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   const [mostrarEliminarId, setMostrarEliminarId] = useState(null);
   const [verHistorial, setVerHistorial] = useState(false);
   const [motivoPausa, setMotivoPausa] = useState('');
+  const [mostrarBaja, setMostrarBaja] = useState(false);
+  const [motivoBaja, setMotivoBaja] = useState('');
+
+  // Las que siguen contando para algo. Es el mismo criterio que usa el backend
+  // al anotar la baja en auditoria, y lo que se le avisa antes de confirmarla.
+  const vivas = membresias.filter(m => VIGENTES.includes(m.estado)).length;
+
+  async function confirmarBaja() {
+    await window.api.clientes.darDeBaja({
+      clienteId, usuarioId: usuarioActual ? usuarioActual.id : null, motivo: motivoBaja,
+    });
+    setMostrarBaja(false);
+    setMotivoBaja('');
+    cargar();
+  }
+
+  async function confirmarReactivar() {
+    await window.api.clientes.reactivar({
+      clienteId, usuarioId: usuarioActual ? usuarioActual.id : null,
+    });
+    cargar();
+  }
 
   async function cargar() {
     const c = await window.api.clientes.obtener(clienteId);
@@ -65,6 +87,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setMostrarRenovarId(null);
     setMostrarEliminarId(null);
     setMotivoPausa('');
+    setMostrarBaja(false);
   }
 
   async function expandir(membresiaId) {
@@ -232,7 +255,59 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
         </div>
       )}
 
-      <button onClick={() => onEditar(cliente)}>Editar datos del cliente</button>
+      {/* Dar de baja no borra nada: apaga el interruptor que la app ya respetaba
+          en todas partes. Se pone aqui, en la ficha, y no en la lista: para darle
+          de baja hay que haber entrado a mirar a quien se le esta dando. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => onEditar(cliente)}>Editar datos del cliente</button>
+        {cliente.activo === 1 ? (
+          <button onClick={() => { cerrarPaneles(); setMostrarBaja(v => !v); }}>
+            Dar de baja
+          </button>
+        ) : (
+          <button onClick={confirmarReactivar}>Volver a dar de alta</button>
+        )}
+      </div>
+
+      {cliente.activo === 0 && (
+        <div style={{ margin: '12px 0', padding: '10px 14px', maxWidth: 620,
+                      background: 'var(--superficie-alta)', border: '1px solid var(--borde-fuerte)',
+                      borderRadius: 'var(--radio)', color: 'var(--texto-suave)' }}>
+          <b>Este cliente está dado de baja.</b> No sale en las búsquedas, no cuenta
+          para los recordatorios y no puede entrar por el kiosco. Su historial está
+          intacto y vuelve entero al darle de alta.
+        </div>
+      )}
+
+      {mostrarBaja && (
+        <div style={{ margin: '12px 0', padding: 14, maxWidth: 620,
+                      border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)',
+                      borderRadius: 'var(--radio)' }}>
+          <p style={{ marginTop: 0 }}>
+            ¿Dar de baja a <b>{cliente.nombre}</b>?
+          </p>
+          {/* Lo que se lleva y lo que no, dicho antes y no despues. */}
+          <p style={{ marginTop: 0 }}>
+            Deja de salir en las búsquedas, en el censo de correos y en los
+            recordatorios, y el kiosco no le deja entrar. <b>No se borra nada</b>:
+            sus membresías, pagos y asistencias siguen ahí, y puedes volver a darle
+            de alta cuando quieras.
+          </p>
+          {vivas > 0 && (
+            <p style={{ color: 'var(--aviso)' }}>
+              {'⚠'} Tiene <b>{vivas}</b> {vivas === 1 ? 'membresía que sigue viva' : 'membresías que siguen vivas'}.
+              Darle de baja no le devuelve el dinero ni anula nada; simplemente deja
+              de poder entrar.
+            </p>
+          )}
+          <input placeholder="Motivo (opcional)" value={motivoBaja}
+                 onChange={e => setMotivoBaja(e.target.value)} style={{ width: '100%', maxWidth: 380 }} />
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button onClick={confirmarBaja}>Sí, dar de baja</button>
+            <button onClick={() => { setMostrarBaja(false); setMotivoBaja(''); }}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {/* El boton de vender va arriba, antes de la lista. Debajo quedaba enterrado
           bajo un historial que solo crece, y es la accion que mas se usa. */}

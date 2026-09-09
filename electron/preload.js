@@ -91,6 +91,9 @@ clientes: {
   asignarPin: (id, pin) => ipcRenderer.invoke('clientes:asignarPin', id, pin),
   tienePin: (id) => ipcRenderer.invoke('clientes:tienePin', id),
   quitarPin: (id) => ipcRenderer.invoke('clientes:quitarPin', id),
+  darDeBaja: (datos) => ipcRenderer.invoke('clientes:darDeBaja', datos),
+  reactivar: (datos) => ipcRenderer.invoke('clientes:reactivar', datos),
+  listarDadosDeBaja: () => ipcRenderer.invoke('clientes:listarDadosDeBaja'),
 },
 planes: {
   crear: (plan) => ipcRenderer.invoke('planes:crear', plan),

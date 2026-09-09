@@ -139,7 +139,91 @@ function quitarPin(id) {
   return { ok: info.changes > 0 };
 }
 
+// ------------------------------------------------------------- dar de baja
+
+// Dar de baja NO borra nada. Solo apaga el interruptor `activo`, que toda la app
+// ya respetaba desde el principio -- la busqueda, el panel de Clientes, el censo
+// de correos, la ronda de recordatorios y la identificacion del kiosco filtran
+// por activo = 1 -- pero que hasta hoy no habia forma de apagar desde la app.
+//
+// Es lo que faltaba para poder quitar de en medio a alguien sin perder lo que
+// pago. Lo unico que existia era vaciar la zona de clientes entera desde el
+// panel de desarrollador, que se lleva a TODOS por delante.
+//
+// Se anota en auditoria, como la anulacion de una membresia: quien, cuando y por
+// que. Y se puede deshacer.
+function darDeBaja({ clienteId, usuarioId, motivo } = {}) {
+  const db = getDb();
+  const cliente = db.prepare(`SELECT id, nombre, activo FROM clientes WHERE id = ?`).get(clienteId);
+  if (!cliente) return { ok: false, motivo: 'no_existe' };
+  if (cliente.activo === 0) return { ok: true, yaEstaba: true };
+
+  // Cuantas membresias suyas siguen vivas. No lo impide -- puede que alguien
+  // pague y desaparezca al dia siguiente -- pero la pantalla tiene que poder
+  // avisarlo antes, y queda escrito en auditoria.
+  const { cargarEstados } = require('./panel-clientes');
+  const suyas = (cargarEstados().get(clienteId) || [])
+    .filter(m => !['vencida', 'agotada', 'anulada'].includes(m.estado));
+
+  db.transaction(() => {
+    db.prepare(`UPDATE clientes SET activo = 0 WHERE id = ?`).run(clienteId);
+    db.prepare(`
+      INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
+      VALUES (?, 'cliente_baja', 'clientes', ?, ?, ?)
+    `).run(usuarioId || null, clienteId, new Date().toISOString(),
+           JSON.stringify({ nombre: cliente.nombre, motivo: motivo || null,
+                            membresiasVivas: suyas.length }));
+  })();
+
+  return { ok: true, membresiasVivas: suyas.length };
+}
+
+function reactivar({ clienteId, usuarioId } = {}) {
+  const db = getDb();
+  const cliente = db.prepare(`SELECT id, nombre, activo FROM clientes WHERE id = ?`).get(clienteId);
+  if (!cliente) return { ok: false, motivo: 'no_existe' };
+  if (cliente.activo === 1) return { ok: true, yaEstaba: true };
+
+  db.transaction(() => {
+    db.prepare(`UPDATE clientes SET activo = 1 WHERE id = ?`).run(clienteId);
+    db.prepare(`
+      INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
+      VALUES (?, 'cliente_reactivado', 'clientes', ?, ?, ?)
+    `).run(usuarioId || null, clienteId, new Date().toISOString(),
+           JSON.stringify({ nombre: cliente.nombre }));
+  })();
+
+  return { ok: true };
+}
+
+// Sin esto, dar de baja seria una puerta de un solo sentido: el cliente
+// desaparece de la busqueda y ya no hay forma de encontrarlo para deshacerlo.
+// Se devuelve la fecha y el motivo que quedaron en auditoria, que es lo que
+// permite reconocer al que se dio de baja por error.
+function listarDadosDeBaja() {
+  return getDb().prepare(`
+    SELECT c.id, c.documento, c.nombre, c.telefono, c.email,
+           a.fecha AS fechaBaja, a.detalle AS detalleBaja
+    FROM clientes c
+    LEFT JOIN auditoria a ON a.id = (
+      SELECT MAX(id) FROM auditoria
+      WHERE entidad = 'clientes' AND entidad_id = c.id AND accion = 'cliente_baja'
+    )
+    WHERE c.activo = 0
+    ORDER BY c.nombre
+  `).all().map(f => {
+    let motivo = null;
+    try { motivo = JSON.parse(f.detalleBaja || '{}').motivo || null; } catch (e) {}
+    return {
+      id: f.id, documento: f.documento, nombre: f.nombre,
+      telefono: f.telefono, email: f.email,
+      fechaBaja: f.fechaBaja, motivo,
+    };
+  });
+}
+
 module.exports = {
   crear, buscar, obtenerPorId, editar, asignarPin, tienePin, quitarPin,
+  darDeBaja, reactivar, listarDadosDeBaja,
   siguienteDocumentoProvisional, PREFIJO_PROVISIONAL,
 };

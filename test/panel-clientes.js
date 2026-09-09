@@ -167,6 +167,107 @@ app.whenReady().then(async () => {
     check('y lista las dos para poder abonar a cada una',
           ivan.membresiasConSaldo.length === 2, 'listadas=' + ivan.membresiasConSaldo.length);
 
+    // ---- Dar de baja a un cliente ----------------------------------------
+    // Lo que faltaba para poder quitar de en medio a alguien sin perder lo que
+    // pago. Lo unico que existia era vaciar la zona de clientes entera desde el
+    // panel de desarrollador, que se lleva a TODOS por delante.
+    //
+    // Lo que se prueba, sobre todo, es lo que NO hace: no borra.
+    const recordatorios = require('../electron/services/recordatorios');
+    const identificacion = require('../electron/services/identificacion');
+
+    const baja = clientes.crear({ documento: '90001', nombre: 'Se Va Del Gym',
+                                  telefono: '3009990000', email: 'sevadelgym@gmail.com' });
+    const suMembresia = membresias.vender({ clienteId: baja, planId: mensual, usuarioId });
+    membresias.registrarPago({ membresiaId: suMembresia, monto: 70000, metodo: 'Efectivo', usuarioId });
+    asistencias.registrar({ clienteId: baja, metodo: 'pin', registradoPor: usuarioId });
+    await clientes.asignarPin(baja, '4321');
+
+    const contarTodo = () => ({
+      clientes: db.prepare('SELECT COUNT(*) AS n FROM clientes').get().n,
+      membresias: db.prepare('SELECT COUNT(*) AS n FROM membresias').get().n,
+      pagos: db.prepare('SELECT COUNT(*) AS n FROM pagos').get().n,
+      asistencias: db.prepare('SELECT COUNT(*) AS n FROM asistencias').get().n,
+    });
+    const antesDeLaBaja = JSON.stringify(contarTodo());
+    const saleEnBusqueda = () => clientes.buscar('Se Va Del Gym').length > 0;
+    const censoLoCuenta = () => recordatorios.censoCorreos().total;
+    const censoAntes = censoLoCuenta();
+
+    check('antes de la baja, el cliente sale en la busqueda', saleEnBusqueda());
+    check('y el kiosco lo reconoce con sus 4 digitos y su PIN',
+          (await identificacion.identificarPorDocumentoYPin('0001', '4321')).ok === true);
+
+    const r = clientes.darDeBaja({ clienteId: baja, usuarioId, motivo: 'se mudo de ciudad' });
+    check('dar de baja responde ok y dice cuantas membresias vivas tenia',
+          r.ok === true && r.membresiasVivas === 1, JSON.stringify(r));
+
+    // Lo importante: NO BORRA.
+    check('dar de baja no borra absolutamente nada',
+          JSON.stringify(contarTodo()) === antesDeLaBaja,
+          antesDeLaBaja + ' -> ' + JSON.stringify(contarTodo()));
+
+    // Y desaparece de los cuatro sitios que ya filtraban por activo = 1.
+    check('deja de salir en la busqueda', !saleEnBusqueda());
+    check('deja de contar en el censo de correos', censoLoCuenta() === censoAntes - 1,
+          censoAntes + ' -> ' + censoLoCuenta());
+    check('deja de contar en el panel de Clientes',
+          !panel.panelLateral().noPuedenEntrenar.some(c => c.id === baja) &&
+          !panel.buscarConEstado('Se Va Del Gym').some(c => c.id === baja));
+    const enKiosco = await identificacion.identificarPorDocumentoYPin('0001', '4321');
+    check('y el kiosco deja de reconocerlo, aunque el PIN siga siendo el bueno',
+          enKiosco.ok === false && enKiosco.motivo === 'no_registrado', JSON.stringify(enKiosco));
+
+    // Queda escrito quien, cuando y por que.
+    const anotado = db.prepare(
+      `SELECT * FROM auditoria WHERE entidad = 'clientes' AND entidad_id = ? AND accion = 'cliente_baja'`
+    ).get(baja);
+    check('la baja queda anotada en auditoria con su motivo',
+          !!anotado && JSON.parse(anotado.detalle).motivo === 'se mudo de ciudad',
+          anotado ? anotado.detalle : 'no se anoto');
+
+    // Y se puede encontrar para deshacerlo: sin esto seria una puerta de un solo
+    // sentido, porque el cliente ya no sale en ninguna busqueda.
+    const lista = clientes.listarDadosDeBaja();
+    const suyo = lista.find(c => c.id === baja);
+    check('el dado de baja se puede encontrar en su propia lista',
+          !!suyo, JSON.stringify(lista.map(c => c.nombre)));
+    check('y esa lista trae la fecha y el motivo, para reconocer el error',
+          suyo.motivo === 'se mudo de ciudad' && /^\d{4}-\d{2}-\d{2}/.test(suyo.fechaBaja || ''),
+          JSON.stringify(suyo));
+
+    // Hugo lleva inactivo desde el principio de esta suite, puesto a mano y sin
+    // pasar por darDeBaja(). Representa a los que ya estaban con activo = 0
+    // antes de que esta funcion existiera: tienen que salir igual, o quedarian
+    // atrapados fuera para siempre. Salen sin fecha ni motivo, que es la verdad:
+    // nadie la anoto.
+    const heredado = lista.find(c => c.nombre === 'Hugo Inactivo');
+    check('los que ya estaban inactivos de antes tambien salen en la lista',
+          !!heredado && heredado.fechaBaja === null && heredado.motivo === null,
+          JSON.stringify(heredado));
+
+    check('dar de baja dos veces no rompe ni duplica la anotacion',
+          clientes.darDeBaja({ clienteId: baja, usuarioId }).yaEstaba === true &&
+          db.prepare(`SELECT COUNT(*) AS n FROM auditoria WHERE entidad_id = ? AND accion = 'cliente_baja'`)
+            .get(baja).n === 1);
+
+    // Deshacerlo lo devuelve entero.
+    clientes.reactivar({ clienteId: baja, usuarioId });
+    check('darlo de alta lo devuelve a la busqueda', saleEnBusqueda());
+    check('y con todo su historial intacto',
+          JSON.stringify(contarTodo()) === antesDeLaBaja &&
+          membresias.listarPorCliente(baja).length === 1);
+    check('el censo vuelve a contarlo', censoLoCuenta() === censoAntes);
+    check('y el kiosco vuelve a reconocerlo con el mismo PIN de siempre',
+          (await identificacion.identificarPorDocumentoYPin('0001', '4321')).ok === true);
+    check('y ya no sale en la lista de dados de baja',
+          !clientes.listarDadosDeBaja().some(c => c.id === baja),
+          JSON.stringify(clientes.listarDadosDeBaja().map(c => c.nombre)));
+
+    check('dar de baja a alguien que no existe avisa en vez de reventar',
+          clientes.darDeBaja({ clienteId: 99999, usuarioId }).motivo === 'no_existe' &&
+          clientes.reactivar({ clienteId: 99999, usuarioId }).motivo === 'no_existe');
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);
