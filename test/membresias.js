@@ -380,6 +380,63 @@ app.whenReady().then(async () => {
           db.prepare(`SELECT plan_nombre FROM membresias WHERE plan_id = ? LIMIT 1`).get(mensual)
             .plan_nombre === nombreEnMembresia, nombreEnMembresia);
 
+    // -------------------------------------------------------------------
+    // Anadir y quitar tiquetes de una ticketera ya vendida. La verdad sigue
+    // siendo tickets_totales; lo gastado no se toca desde aqui.
+    // -------------------------------------------------------------------
+    const tk = planes.crear({ nombre: 'Tiquetera 1 mes / 15 tiquetes', tipo: 'ticketera',
+                              precio: 65000, num_tickets: 15, dias_vigencia: 30 });
+    const cliTk = clientes.crear({ documento: '7000001111', nombre: 'Tita Tiquetes', telefono: '300' });
+    const memTk = membresias.vender({ clienteId: cliTk, planId: tk, usuarioId });
+
+    const inicial = membresias.estadoTickets(memTk);
+    check('la ticketera nace con los 15 tiquetes del plan y ninguno usado',
+          inicial.totales === 15 && inicial.usados === 0 && inicial.disponibles === 15,
+          JSON.stringify(inicial));
+
+    const masCinco = membresias.ajustarTickets({ membresiaId: memTk, delta: 5, motivo: 'cortesia', usuarioId });
+    check('anadir 5 deja 20 disponibles',
+          masCinco.ok === true && masCinco.totales === 20 && masCinco.disponibles === 20,
+          JSON.stringify(masCinco));
+
+    const menosTres = membresias.ajustarTickets({ membresiaId: memTk, delta: -3, usuarioId });
+    check('quitar 3 deja 17', menosTres.ok === true && menosTres.disponibles === 17);
+
+    // El freno que importa: quitar mas de los que quedan es un error de dedo.
+    const pasado = membresias.ajustarTickets({ membresiaId: memTk, delta: -50, usuarioId });
+    check('no se puede dejar el saldo en negativo',
+          pasado.ok === false && pasado.motivo === 'quedaria_en_negativo' &&
+          pasado.disponiblesAhora === 17, JSON.stringify(pasado));
+    check('y el rechazo no cambio nada', membresias.estadoTickets(memTk).totales === 17);
+
+    check('un ajuste de 0 no hace nada',
+          membresias.ajustarTickets({ membresiaId: memTk, delta: 0, usuarioId }).motivo === 'cantidad_invalida');
+
+    // Gastar un tiquete es cosa de las asistencias, no de este ajuste.
+    db.prepare(`UPDATE membresias SET tickets_usados = 4 WHERE id = ?`).run(memTk);
+    const conUsados = membresias.estadoTickets(memTk);
+    check('los disponibles descuentan lo ya usado',
+          conUsados.disponibles === 13 && conUsados.usados === 4, JSON.stringify(conUsados));
+    const alRas = membresias.ajustarTickets({ membresiaId: memTk, delta: -13, usuarioId });
+    check('se puede bajar justo hasta cero, no mas', alRas.ok === true && alRas.disponibles === 0);
+    check('pero ni uno mas',
+          membresias.ajustarTickets({ membresiaId: memTk, delta: -1, usuarioId }).ok === false);
+
+    // Una membresia de periodo no tiene tiquetes que ajustar.
+    const dePeriodo = membresias.vender({ clienteId: ana, planId: mensual, usuarioId, fInicio: '2027-01-01' });
+    check('una membresia de periodo rechaza el ajuste',
+          membresias.ajustarTickets({ membresiaId: dePeriodo, delta: 5, usuarioId }).motivo === 'no_es_ticketera');
+    check('y estadoTickets no devuelve nada para ella',
+          membresias.estadoTickets(dePeriodo) === null);
+
+    // Cada ajuste queda escrito, que es lo que permite revisar un saldo raro.
+    const historial = membresias.estadoTickets(memTk).ajustes;
+    check('cada ajuste queda en auditoria con su cantidad',
+          historial.length === 3 && historial[0].delta === -13,
+          'ajustes=' + historial.length);
+    check('y con el motivo cuando se escribio',
+          historial.some(a => a.motivo === 'cortesia'));
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

@@ -21,6 +21,7 @@ require('./ipc/huellas');
 require('./ipc/imagenes');
 require('./ipc/intercambio');
 require('./ipc/desarrollador');
+require('./ipc/portapapeles');
 require('./ipc/recordatorios');
 
 

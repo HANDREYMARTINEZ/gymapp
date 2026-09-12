@@ -12,6 +12,10 @@ ipcMain.handle('clientes:asignarPin', (_evt, id, pin) => repo.asignarPin(id, pin
 ipcMain.handle('clientes:tienePin', (_evt, id) => repo.tienePin(id));
 ipcMain.handle('clientes:quitarPin', (_evt, id) => repo.quitarPin(id));
 
+// El PIN en lote, para los que entraron por el Excel sin uno.
+ipcMain.handle('clientes:asignarPinEnLote', (_evt, datos) => repo.asignarPinEnLote(datos));
+ipcMain.handle('clientes:pinesResumen', () => repo.pinesResumen());
+
 // Dar de baja y su vuelta atras. No borran nada: apagan y encienden el
 // interruptor `activo` que toda la app ya respetaba, y lo anotan en auditoria.
 ipcMain.handle('clientes:darDeBaja', (_evt, datos) => repo.darDeBaja(datos));

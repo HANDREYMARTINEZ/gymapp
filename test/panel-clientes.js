@@ -268,6 +268,52 @@ app.whenReady().then(async () => {
           clientes.darDeBaja({ clienteId: 99999, usuarioId }).motivo === 'no_existe' &&
           clientes.reactivar({ clienteId: 99999, usuarioId }).motivo === 'no_existe');
 
+    // -------------------------------------------------------------------
+    // Buscar como se teclea en el mostrador: sin tildes y sin respetar
+    // mayusculas. El control del gimnasio trae los nombres en mayuscula.
+    // -------------------------------------------------------------------
+    clientes.crear({ documento: '5555000001', nombre: 'ALEXANDRA SALDAÑO', telefono: '320' });
+    clientes.crear({ documento: '5555000002', nombre: 'José Muñoz Peña', telefono: '321' });
+    clientes.crear({ documento: '5555000003', nombre: 'DARLY', telefono: '322' });
+
+    const porNombre = clientes.buscar('alexandra');
+    check('encuentra por el nombre de pila en minusculas',
+          porNombre.length === 1 && porNombre[0].nombre === 'ALEXANDRA SALDAÑO');
+
+    // Lo que antes no funcionaba: la ENE no la doblaba LIKE.
+    const porApellido = clientes.buscar('saldano');
+    check('encuentra por el apellido escrito sin la ene',
+          porApellido.length === 1 && porApellido[0].documento === '5555000001',
+          'resultados=' + porApellido.length);
+    check('y tambien escribiendolo con ene minuscula',
+          clientes.buscar('saldaño').length === 1);
+
+    check('encuentra por el apellido suelto',
+          clientes.buscar('munoz').length === 1);
+    check('por el segundo apellido tambien',
+          clientes.buscar('pena').length === 1);
+    check('por el nombre completo escrito sin tildes',
+          clientes.buscar('jose munoz pena').length === 1);
+    check('y con las tildes puestas',
+          clientes.buscar('José Muñoz Peña').length === 1);
+
+    // Un cliente con un solo nombre tiene que encontrarse igual.
+    check('un cliente sin apellido se encuentra por su unico nombre',
+          clientes.buscar('darly').length === 1);
+
+    check('la cedula sigue funcionando como antes',
+          clientes.buscar('5555000002').length === 1);
+
+    // Editar el nombre tiene que mover tambien la columna de busqueda; si no,
+    // el cliente se quedaria encontrable solo por su nombre viejo.
+    const paraRenombrar = clientes.buscar('darly')[0].id;
+    clientes.editar(paraRenombrar, {
+      documento: '5555000003', nombre: 'DARLY GUZMÁN', telefono: '322',
+      email: null, foto: null, f_nacimiento: null, contacto_emg: null, notas: null,
+    });
+    check('al renombrar se puede buscar por el apellido nuevo',
+          clientes.buscar('guzman').length === 1);
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

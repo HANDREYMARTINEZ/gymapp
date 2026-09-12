@@ -91,6 +91,8 @@ clientes: {
   asignarPin: (id, pin) => ipcRenderer.invoke('clientes:asignarPin', id, pin),
   tienePin: (id) => ipcRenderer.invoke('clientes:tienePin', id),
   quitarPin: (id) => ipcRenderer.invoke('clientes:quitarPin', id),
+  asignarPinEnLote: (datos) => ipcRenderer.invoke('clientes:asignarPinEnLote', datos),
+  pinesResumen: () => ipcRenderer.invoke('clientes:pinesResumen'),
   darDeBaja: (datos) => ipcRenderer.invoke('clientes:darDeBaja', datos),
   reactivar: (datos) => ipcRenderer.invoke('clientes:reactivar', datos),
   listarDadosDeBaja: () => ipcRenderer.invoke('clientes:listarDadosDeBaja'),
@@ -154,6 +156,8 @@ membresias: {
   listarPorCliente: (clienteId) => ipcRenderer.invoke('membresias:listarPorCliente', clienteId),
   pagosDelDia: (fecha) => ipcRenderer.invoke('membresias:pagosDelDia', fecha),
   listarPagos: (membresiaId) => ipcRenderer.invoke('membresias:listarPagos', membresiaId),
+  ajustarTickets: (datos) => ipcRenderer.invoke('membresias:ajustarTickets', datos),
+  estadoTickets: (membresiaId) => ipcRenderer.invoke('membresias:estadoTickets', membresiaId),
 },
 
 pausas: {
@@ -183,6 +187,12 @@ imagenes: {
   obtenerVarias: (entidad, ids) => ipcRenderer.invoke('imagenes:obtenerVarias', entidad, ids),
   existe: (entidad, entidadId) => ipcRenderer.invoke('imagenes:existe', entidad, entidadId),
   eliminar: (entidad, entidadId) => ipcRenderer.invoke('imagenes:eliminar', entidad, entidadId),
+},
+
+// Copiar al portapapeles lo hace el proceso principal: el handler de permisos
+// de main.js le niega el portapapeles al navegador a proposito.
+sistema: {
+  copiar: (texto) => ipcRenderer.invoke('sistema:copiar', texto),
 },
 
 kiosco: {

@@ -1,4 +1,5 @@
 const { getDb } = require('../connection');
+const { sinTildes } = require('../texto');
 
 // El nombre se guarda recortado, siempre.
 //
@@ -15,8 +16,7 @@ function limpiarNombre(nombre) {
 // sin mayusculas y sin tildes. Asi "Dia ", "Dia" y "Dia" con tilde caen juntos,
 // que es exactamente lo que hay que ver antes de decidir cual se queda.
 function nombreNormalizado(nombre) {
-  return limpiarNombre(nombre).toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return sinTildes(limpiarNombre(nombre)).toLowerCase();
 }
 
 function crear(plan) {

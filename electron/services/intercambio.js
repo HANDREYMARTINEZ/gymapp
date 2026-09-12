@@ -302,6 +302,7 @@ function planPara(fila, cache, avisos) {
 // clientes: es la misma regla que se aplica cuando se crea un cliente a mano, y
 // tenerla en dos sitios era pedir que un dia dejaran de coincidir.
 const { siguienteDocumentoProvisional } = require('../db/repos/clientes');
+const { normalizarBusqueda } = require('../db/texto');
 
 async function importarExcel(ruta, { usuarioId } = {}) {
   const lectura = await leerFilas(ruta);
@@ -356,11 +357,13 @@ async function importarExcel(ruta, { usuarioId } = {}) {
           // no pisan lo que ya hay: un Excel al que le falta el correo no deberia
           // borrar el correo que alguien escribio a mano en la app.
           db.prepare(`
-            UPDATE clientes SET nombre = ?, telefono = COALESCE(NULLIF(?, ''), telefono),
+            UPDATE clientes SET nombre = ?, nombre_busqueda = ?,
+                   telefono = COALESCE(NULLIF(?, ''), telefono),
                    email = COALESCE(NULLIF(?, ''), email),
                    f_nacimiento = COALESCE(?, f_nacimiento)
             WHERE id = ?
-          `).run(fila.nombre, fila.telefono, fila.correo, fila.nacimiento, existente.id);
+          `).run(fila.nombre, normalizarBusqueda(fila.nombre),
+                 fila.telefono, fila.correo, fila.nacimiento, existente.id);
           clienteId = existente.id;
           resultado.clientesActualizados++;
         } else {
@@ -368,9 +371,9 @@ async function importarExcel(ruta, { usuarioId } = {}) {
           const documento = provisional ? siguienteDocumentoProvisional() : fila.documento;
 
           const info = db.prepare(`
-            INSERT INTO clientes (documento, documento_ult4, nombre, telefono, email, f_nacimiento, f_registro, activo, documento_provisional)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-          `).run(documento, documento.slice(-4), fila.nombre,
+            INSERT INTO clientes (documento, documento_ult4, nombre, nombre_busqueda, telefono, email, f_nacimiento, f_registro, activo, documento_provisional)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          `).run(documento, documento.slice(-4), fila.nombre, normalizarBusqueda(fila.nombre),
                  fila.telefono || null, fila.correo || null, fila.nacimiento,
                  new Date().toISOString(), provisional ? 1 : 0);
           clienteId = info.lastInsertRowid;

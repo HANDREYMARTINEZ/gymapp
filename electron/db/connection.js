@@ -71,6 +71,7 @@ function conectar() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   ejecutarMigraciones();
+  rellenarNombreBusqueda();
   console.log('Base de datos en:', dbPath);
   return db;
 }
@@ -87,6 +88,24 @@ function ejecutarMigraciones() {
     db.prepare(`INSERT INTO _migraciones (nombre, aplicada_en) VALUES (?, ?)`).run(archivo, new Date().toISOString());
     console.log(`Migración aplicada: ${archivo}`);
   }
+}
+
+// El nombre normalizado no lo puede calcular SQLite -- no sabe quitar tildes --
+// asi que la columna que crea la migracion 011 se rellena aqui, y solo para las
+// filas que todavia no lo tengan. Cuesta nada cuando ya esta todo al dia, y
+// cubre tanto a los clientes de antes de la migracion como a cualquier fila que
+// entrara por un camino que se olvidara de escribirla.
+function rellenarNombreBusqueda() {
+  const { normalizarBusqueda } = require('./texto');
+  const pendientes = db.prepare(
+    `SELECT id, nombre FROM clientes WHERE nombre_busqueda IS NULL`
+  ).all();
+  if (pendientes.length === 0) return;
+  const poner = db.prepare(`UPDATE clientes SET nombre_busqueda = ? WHERE id = ?`);
+  db.transaction(() => {
+    for (const c of pendientes) poner.run(normalizarBusqueda(c.nombre), c.id);
+  })();
+  console.log('Nombres normalizados para busqueda: ' + pendientes.length);
 }
 
 function getDb() {

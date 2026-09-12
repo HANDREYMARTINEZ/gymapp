@@ -71,6 +71,70 @@ function vender({ clienteId, planId, usuarioId, descuentoPct = 0, fInicio: fInic
   return info.lastInsertRowid;
 }
 
+// Anadir o quitar tiquetes de una ticketera ya vendida.
+//
+// La verdad de cuantos tiquetes hay sigue siendo `tickets_totales`, y lo gastado
+// sigue contandose en `asistencias` (una fila por entrada). No se abre una
+// segunda contabilidad de movimientos: dos cuentas de lo mismo acaban
+// discrepando, y la de las asistencias es la que no se puede falsear. Lo que si
+// queda escrito es el ajuste -- quien, cuando, cuantos y por que -- en
+// `auditoria`, donde ya viven las anulaciones y las bajas.
+//
+// El freno: no se puede dejar al cliente con tiquetes disponibles en negativo.
+// Quitar mas de los que quedan es siempre un error de dedo.
+function ajustarTickets({ membresiaId, delta, motivo, usuarioId } = {}) {
+  const db = getDb();
+  const n = parseInt(delta, 10);
+  if (!Number.isInteger(n) || n === 0) return { ok: false, motivo: 'cantidad_invalida' };
+
+  const m = db.prepare(`SELECT * FROM membresias WHERE id = ?`).get(membresiaId);
+  if (!m) return { ok: false, motivo: 'no_existe' };
+  if (m.anulada === 1) return { ok: false, motivo: 'esta_anulada' };
+  if (m.plan_tipo !== 'ticketera') return { ok: false, motivo: 'no_es_ticketera' };
+
+  const totales = (m.tickets_totales || 0) + n;
+  const disponibles = totales - (m.tickets_usados || 0);
+  if (disponibles < 0) {
+    return { ok: false, motivo: 'quedaria_en_negativo',
+             disponiblesAhora: (m.tickets_totales || 0) - (m.tickets_usados || 0) };
+  }
+
+  db.transaction(() => {
+    db.prepare(`UPDATE membresias SET tickets_totales = ? WHERE id = ?`).run(totales, membresiaId);
+    db.prepare(`
+      INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
+      VALUES (?, 'membresia_tickets', 'membresias', ?, ?, ?)
+    `).run(usuarioId || null, membresiaId, new Date().toISOString(),
+           JSON.stringify({ delta: n, motivo: motivo || null,
+                            totalesAntes: m.tickets_totales, totalesDespues: totales }));
+  })();
+
+  return { ok: true, totales, usados: m.tickets_usados || 0, disponibles };
+}
+
+// Lo que la ficha necesita mostrar de una ticketera, y el historial de ajustes
+// que le han hecho. Sin esto, "quitar tiquetes" seria una operacion a ciegas.
+function estadoTickets(membresiaId) {
+  const db = getDb();
+  const m = db.prepare(`SELECT * FROM membresias WHERE id = ?`).get(membresiaId);
+  if (!m || m.plan_tipo !== 'ticketera') return null;
+  const ajustes = db.prepare(`
+    SELECT fecha, detalle FROM auditoria
+    WHERE accion = 'membresia_tickets' AND entidad_id = ?
+    ORDER BY id DESC LIMIT 20
+  `).all(membresiaId).map(a => {
+    let d = {};
+    try { d = JSON.parse(a.detalle || '{}'); } catch (e) {}
+    return { fecha: a.fecha, delta: d.delta, motivo: d.motivo || null };
+  });
+  return {
+    totales: m.tickets_totales || 0,
+    usados: m.tickets_usados || 0,
+    disponibles: (m.tickets_totales || 0) - (m.tickets_usados || 0),
+    ajustes,
+  };
+}
+
 // Un pago en efectivo es dinero que entra al mismo cajon que las ventas, asi que
 // tiene que aparecer en el arqueo. Si no, todo dia con pagos en efectivo cierra
 // con un sobrante falso y el arqueo deja de servir para detectar errores.
@@ -289,4 +353,5 @@ function listarPagos(membresiaId) {
   return getDb().prepare(`SELECT * FROM pagos WHERE membresia_id = ? ORDER BY fecha DESC`).all(membresiaId);
 }
 
-module.exports = { vender, anular, renovar, cambiarFechaInicio, registrarPago, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos };
+module.exports = {
+  ajustarTickets, estadoTickets, vender, anular, renovar, cambiarFechaInicio, registrarPago, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos };

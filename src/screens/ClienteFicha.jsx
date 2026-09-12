@@ -49,10 +49,36 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   const [motivoPausa, setMotivoPausa] = useState('');
   const [mostrarBaja, setMostrarBaja] = useState(false);
   const [motivoBaja, setMotivoBaja] = useState('');
+  // Tiquetes: que membresia tiene el panel abierto, cuantos se anaden o quitan
+  // y por que. El motivo no es obligatorio, pero queda en auditoria.
+  const [mostrarTicketsId, setMostrarTicketsId] = useState(null);
+  const [deltaTickets, setDeltaTickets] = useState('');
+  const [motivoTickets, setMotivoTickets] = useState('');
+  const [avisoTickets, setAvisoTickets] = useState(null);
 
   // Las que siguen contando para algo. Es el mismo criterio que usa el backend
   // al anotar la baja en auditoria, y lo que se le avisa antes de confirmarla.
   const vivas = membresias.filter(m => VIGENTES.includes(m.estado)).length;
+
+  // Anadir (delta positivo) o quitar (negativo) tiquetes de una ticketera ya
+  // vendida, sin tocar nada mas de la membresia.
+  async function ajustarTickets(membresiaId, signo) {
+    const cantidad = parseInt(deltaTickets, 10);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      setAvisoTickets({ ok: false, motivo: 'cantidad_invalida' });
+      return;
+    }
+    const r = await window.api.membresias.ajustarTickets({
+      membresiaId, delta: signo * cantidad, motivo: motivoTickets,
+      usuarioId: usuarioActual ? usuarioActual.id : null,
+    });
+    setAvisoTickets(r);
+    if (r.ok) {
+      setDeltaTickets('');
+      setMotivoTickets('');
+      cargar();
+    }
+  }
 
   async function confirmarBaja() {
     await window.api.clientes.darDeBaja({
@@ -87,6 +113,10 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setMostrarRenovarId(null);
     setMostrarEliminarId(null);
     setMotivoPausa('');
+    setMostrarTicketsId(null);
+    setDeltaTickets('');
+    setMotivoTickets('');
+    setAvisoTickets(null);
     setMostrarBaja(false);
   }
 
@@ -168,6 +198,12 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
               ? <button onClick={(e) => { e.stopPropagation(); reactivar(m.id); }}>Reactivar</button>
               : <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarPausaId !== m.id; cerrarPaneles(); setMostrarPausaId(abrir ? m.id : null); }}>Pausar</button>
             }
+            {/* Solo para ticketeras: en una de periodo no hay nada que ajustar. */}
+            {m.plan_tipo === 'ticketera' && (
+              <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarTicketsId !== m.id; cerrarPaneles(); setMostrarTicketsId(abrir ? m.id : null); }}>
+                Tiquetes
+              </button>
+            )}
             <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarRenovarId !== m.id; cerrarPaneles(); setMostrarRenovarId(abrir ? m.id : null); }}>
               Renovar
             </button>
@@ -182,6 +218,44 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
             <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
             <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
             <button onClick={cerrarPaneles} style={{ marginLeft: 8 }}>Cancelar</button>
+          </div>
+        )}
+
+        {mostrarTicketsId === m.id && (
+          <div style={{ marginTop: 8, padding: 10, background: 'var(--superficie-alta)',
+                        borderRadius: 'var(--radio)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ marginBottom: 8 }}>
+              <b>{m.tickets_totales - m.tickets_usados} tiquetes disponibles</b>
+              <span style={{ color: 'var(--texto-tenue)' }}>
+                {' '}&mdash; {m.tickets_usados} usados de {m.tickets_totales}
+              </span>
+            </div>
+            {/* Los usados no se editan aqui: cada uno corresponde a una entrada
+                registrada. Lo que se ajusta es cuantos tiene comprados. */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="number" min="1" placeholder="Cuántos" value={deltaTickets}
+                     onChange={e => { setDeltaTickets(e.target.value); setAvisoTickets(null); }}
+                     style={{ width: 90 }} />
+              <button onClick={() => ajustarTickets(m.id, 1)}>Añadir</button>
+              <button onClick={() => ajustarTickets(m.id, -1)}>Quitar</button>
+              <input placeholder="Motivo (opcional)" value={motivoTickets}
+                     onChange={e => setMotivoTickets(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+            </div>
+            {avisoTickets && !avisoTickets.ok && (
+              <p style={{ color: 'var(--error)', marginBottom: 0 }}>
+                {avisoTickets.motivo === 'quedaria_en_negativo'
+                  ? 'No puede quitar tantos: solo quedan ' + avisoTickets.disponiblesAhora + ' disponibles.'
+                  : avisoTickets.motivo === 'cantidad_invalida'
+                    ? 'Escriba cuántos tiquetes, en número entero.'
+                    : 'No se pudo ajustar: ' + avisoTickets.motivo}
+              </p>
+            )}
+            {avisoTickets && avisoTickets.ok && (
+              <p style={{ color: 'var(--exito)', marginBottom: 0 }}>
+                Listo: {avisoTickets.disponibles} disponibles de {avisoTickets.totales}.
+              </p>
+            )}
+            <button onClick={cerrarPaneles} style={{ marginTop: 8 }}>Cerrar</button>
           </div>
         )}
 

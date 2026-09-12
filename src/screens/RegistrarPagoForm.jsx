@@ -1,6 +1,4 @@
-import { useState } from 'react';
-
-const MEDIOS = ['Efectivo', 'Nequi', 'Daviplata', 'Tarjeta', 'Transferencia'];
+import { useState, useEffect } from 'react';
 
 const MOTIVOS_FECHA = {
   no_existe: 'Esa membresía ya no está.',
@@ -15,6 +13,12 @@ export default function RegistrarPagoForm({ membresiaId, fInicioActual, usuarioA
   const [fInicio, setFInicio] = useState(fInicioActual || '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  // La lista venia copiada a mano aqui. Se pide al proceso principal, que es
+  // donde vive el unico vocabulario: con dos copias, anadir un medio en una
+  // dejaba la otra desalineada sin que nada fallara.
+  const [medios, setMedios] = useState(['Efectivo']);
+
+  useEffect(() => { window.api.ventas.mediosPago().then(setMedios); }, []);
 
   const cambiaFecha = !!fInicioActual && !!fInicio && fInicio !== fInicioActual;
 
@@ -63,7 +67,7 @@ export default function RegistrarPagoForm({ membresiaId, fInicioActual, usuarioA
              onChange={e => { setMonto(e.target.value); setError(''); }} />
       <br />
       <select value={metodo} onChange={e => { setMetodo(e.target.value); setError(''); }}>
-        {MEDIOS.map(m => <option key={m}>{m}</option>)}
+        {medios.map(m => <option key={m}>{m}</option>)}
       </select>
       <br /><input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} />
 

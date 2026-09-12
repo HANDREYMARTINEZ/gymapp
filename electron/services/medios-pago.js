@@ -4,7 +4,14 @@
 // silencio, y la comparacion con 'Efectivo' es justamente la que decide si el
 // dinero entra al arqueo de caja.
 
-const MEDIOS = ['Efectivo', 'Nequi', 'Daviplata', 'Tarjeta', 'Transferencia'];
+// 'QR' y 'Llave' salen del control del gimnasio: son 17 de los 27 cobros de la
+// hoja real. 'Llave' es una transferencia que cae en la cuenta de Bancolombia,
+// pero en el mostrador se dice asi y asi se guarda: renombrarla a
+// 'Transferencia' obligaria a traducir mentalmente cada arqueo.
+//
+// Ninguno de los dos es efectivo, asi que ninguno entra al cajon: eso lo
+// decide esEfectivo(), no esta lista.
+const MEDIOS = ['Efectivo', 'QR', 'Llave', 'Nequi', 'Daviplata', 'Tarjeta', 'Transferencia'];
 
 const EFECTIVO = 'Efectivo';
 

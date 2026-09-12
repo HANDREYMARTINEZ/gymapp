@@ -119,12 +119,24 @@ app.whenReady().then(async () => {
     check('y no borro ningun producto', contar('productos') === 1);
 
     // ---- Vaciado de clientes --------------------------------------------
+    //
+    // Con un recordatorio ya enviado por delante. Esa tabla apunta a clientes y
+    // a membresias sin ON DELETE CASCADE, y nacio despues que la rutina de
+    // vaciado: faltaba en la lista, y con foreign_keys = ON el borrado moria por
+    // clave foranea -- en el panel, como un "Borrando..." que no acababa nunca.
+    db.prepare(`INSERT INTO recordatorios_enviados (cliente_id, membresia_id, tipo, email, fecha, ok)
+                VALUES ((SELECT id FROM clientes LIMIT 1), (SELECT id FROM membresias LIMIT 1),
+                        'vencida', 'alguien@ejemplo.com', ?, 1)`).run(new Date().toISOString());
+    check('hay un recordatorio enviado antes de vaciar', contar('recordatorios_enviados') === 1);
+
     const vaciado = await handlers['dev:vaciar'](null, ['clientes']);
     check('vaciar la zona de clientes funciona', vaciado.ok === true, vaciado.motivo);
     check('se llevo los clientes', contar('clientes') === 0);
     check('y las membresias, pagos y asistencias que colgaban de ellos',
           contar('membresias') === 0 && contar('pagos') === 0 && contar('asistencias') === 0);
     check('y sus fotos', contar('imagenes') === 0);
+    check('y los recordatorios que se les habian enviado',
+          contar('recordatorios_enviados') === 0);
     check('pero NO los usuarios', contar('usuarios') >= 1);
     check('ni los planes', contar('planes') === 1);
     check('ni la venta, que es dinero que si entro', contar('ventas') === 1);

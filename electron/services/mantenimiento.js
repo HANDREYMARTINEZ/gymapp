@@ -167,6 +167,11 @@ function vaciar(zonas) {
       borrados.asistencias = borrar('DELETE FROM asistencias');
       borrados.pausas = borrar('DELETE FROM membresia_pausas');
       borrados.pagos = borrar('DELETE FROM pagos');
+      // Antes que las membresias: apunta a las dos, y sin ON DELETE CASCADE.
+      // Se anadio en la migracion 006, despues de escribirse esta rutina, y
+      // faltaba aqui: con un solo recordatorio enviado, borrar clientes moria
+      // por clave foranea y el panel se quedaba en "Borrando..." para siempre.
+      borrados.recordatorios = borrar('DELETE FROM recordatorios_enviados');
       borrados.membresias = borrar('DELETE FROM membresias');
       borrados.huellas = borrar('DELETE FROM huellas');
     }

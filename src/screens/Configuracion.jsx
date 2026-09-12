@@ -66,6 +66,18 @@ export default function Configuracion({ usuarioActual }) {
   const [porRestaurar, setPorRestaurar] = useState(null);
   const [restaurando, setRestaurando] = useState(false);
 
+  // PIN del kiosco, en lote
+  const [pines, setPines] = useState(null);
+  const [pinLote, setPinLote] = useState('0000');
+  const [confirmaPin, setConfirmaPin] = useState(false);
+  const [pinAleatorio, setPinAleatorio] = useState(true);
+  const [trabajandoPin, setTrabajandoPin] = useState(false);
+  const [avisoPin, setAvisoPin] = useState(null);
+  const [copiado, setCopiado] = useState('');
+  // Volver a generarlos: la unica salida si la lista se pierde antes de
+  // guardarla, porque los PIN no se pueden leer una vez guardados.
+  const [regenerar, setRegenerar] = useState(false);
+
   // Recordatorios de vencimiento por correo
   const [rec, setRec] = useState(null);
   const [recResumen, setRecResumen] = useState(null);
@@ -99,7 +111,40 @@ export default function Configuracion({ usuarioActual }) {
     if (r.ok) { setRec(r.config); setRecResumen(r.resumen); setRecProxima(r.proxima); setCenso(r.censo); }
   }
 
-  useEffect(() => { cargarDatos(); cargarRespaldos(); cargarRecordatorios(); }, []);
+  async function cargarPines() {
+    setPines(await window.api.clientes.pinesResumen());
+  }
+
+  // El portapapeles lo escribe el proceso principal: aqui navigator.clipboard
+  // no funciona, y no es cosa de arreglarlo aflojando permisos -- main.js le
+  // niega a proposito todo salvo la camara.
+  async function copiarListaPin() {
+    const texto = ['Cliente\tDocumento\tPIN']
+      .concat(avisoPin.generados.map(g => g.nombre + '\t' + g.documento + '\t' + g.pin))
+      .join('\n');
+    const r = await window.api.sistema.copiar(texto);
+    setCopiado(r.ok ? 'Copiado: ' + avisoPin.generados.length + ' líneas. Péguelas ya en el Bloc de notas.'
+                    : 'No se pudo copiar. Selecciónela con el ratón y use Ctrl+C.');
+  }
+
+  async function asignarPinEnLote() {
+    setTrabajandoPin(true);
+    setAvisoPin(null);
+    const r = await window.api.clientes.asignarPinEnLote({
+      pin: pinLote, aleatorio: pinAleatorio, incluirConPin: regenerar,
+      usuarioId: usuarioActual ? usuarioActual.id : null,
+    });
+    setTrabajandoPin(false);
+    setConfirmaPin(false);
+    setAvisoPin(r);
+    setCopiado('');
+    setRegenerar(false);
+    cargarPines();
+  }
+
+  useEffect(() => {
+    cargarDatos(); cargarRespaldos(); cargarRecordatorios(); cargarPines();
+  }, []);
 
   async function guardarDatos() {
     setGuardando(true);
@@ -422,13 +467,28 @@ export default function Configuracion({ usuarioActual }) {
           <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--aviso)',
                         background: 'var(--aviso-fondo)', borderRadius: 'var(--radio)', maxWidth: 640 }}>
             <h4 style={{ marginTop: 0 }}>{porImportar.nombre}</h4>
+            {/* Las filas sin documento no se pueden clasificar en nuevas o
+                existentes -- se emparejan por cedula, y no la traen -- asi que
+                se cuentan aparte. Decir "0 clientes nuevos" cuando van a entrar
+                27 asustaba con razon: aqui se dice cuantos van a entrar de cada
+                forma, sin ceros que no significan lo que parecen. */}
             <p style={{ marginTop: 0 }}>
-              {porImportar.filas} filas: <b>{porImportar.nuevos}</b> clientes nuevos y{' '}
-              <b>{porImportar.existentes}</b> que ya existen y se van a actualizar con
-              lo que diga el archivo.
+              {porImportar.filas} filas.{' '}
+              {porImportar.nuevos > 0 && (
+                <><b>{porImportar.nuevos}</b> clientes nuevos.{' '}</>
+              )}
+              {porImportar.existentes > 0 && (
+                <><b>{porImportar.existentes}</b> ya existen y se van a actualizar con lo que
+                  diga el archivo.{' '}</>
+              )}
               {porImportar.sinDocumento > 0 && (
-                <> {porImportar.sinDocumento} filas no traen documento: entran igual, con
-                   una cédula provisional que habrá que reemplazar por la real.</>
+                <><b>{porImportar.sinDocumento}</b> filas no traen documento: entran como
+                  clientes nuevos, con una cédula provisional que habrá que reemplazar por
+                  la real.</>
+              )}
+              {porImportar.nuevos === 0 && porImportar.existentes === 0 &&
+               porImportar.sinDocumento === 0 && (
+                <>No hay ninguna fila con datos que importar.</>
               )}
             </p>
             <button onClick={confirmarImportacion} disabled={!!trabajando}>
@@ -488,6 +548,199 @@ export default function Configuracion({ usuarioActual }) {
               <p style={{ margin: 0, color: 'var(--error)' }}>{textoDeFallo(resultadoImport)}</p>
             )}
             <button onClick={() => setResultadoImport(null)} style={{ marginTop: 8 }}>Cerrar</button>
+          </div>
+        )}
+      </section>
+
+      {/* El PIN en lote. Los clientes que entraron por el Excel llegaron sin PIN
+          -- el archivo no lo lleva a proposito -- y sin PIN no pueden marcar
+          asistencia. Ponerselo uno a uno es una tarde entera. */}
+      <section style={{ marginBottom: 40 }}>
+        <h2>PIN del kiosco</h2>
+        <p style={{ maxWidth: 640, color: 'var(--texto-suave)' }}>
+          En el kiosco el cliente teclea los <b>últimos 4 dígitos de su documento</b> y
+          después su PIN. Quien no tenga PIN no puede marcar asistencia.
+        </p>
+
+        {pines && (
+          <div style={{ marginBottom: 12, padding: 14, maxWidth: 640,
+                        borderRadius: 'var(--radio)',
+                        border: '1px solid ' + (pines.sinPin > 0 ? 'var(--aviso)' : 'var(--exito)'),
+                        background: pines.sinPin > 0 ? 'var(--aviso-fondo)' : 'transparent' }}>
+            <b>PIN: {pines.conPin} de {pines.activos} clientes activos</b>
+            {pines.sinPin > 0 ? (
+              <div style={{ marginTop: 6 }}>
+                Faltan <b>{pines.sinPin}</b>, que hoy no pueden entrar por el kiosco.
+              </div>
+            ) : (
+              <div style={{ marginTop: 6, color: 'var(--texto-suave)' }}>
+                Todos los clientes activos tienen PIN.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Si la lista se perdio antes de guardarla no hay forma de recuperarla:
+            los PIN se guardan cifrados. Lo unico que se puede hacer es generar
+            otros nuevos, y para eso hay que poder tocar a los que YA tienen. */}
+        {pines && pines.conPin > 0 && !confirmaPin && (
+          <div style={{ marginTop: 10 }}>
+            {!regenerar ? (
+              <button onClick={() => { setRegenerar(true); setPinAleatorio(true); setAvisoPin(null); }}>
+                Volver a generar los PIN de los {pines.conPin} que ya tienen
+              </button>
+            ) : (
+              <div style={{ padding: 12, maxWidth: 640, borderRadius: 'var(--radio)',
+                            border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)' }}>
+                <p style={{ marginTop: 0 }}>
+                  Se le dará un PIN nuevo a <b>los {pines.activos} clientes activos</b>, también a
+                  los que ya tenían uno. <b>El PIN que tuvieran deja de servir.</b> Úselo solo si
+                  perdió la lista antes de guardarla.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setConfirmaPin(true)}>Sí, generarlos de nuevo</button>
+                  <button onClick={() => setRegenerar(false)}>Cancelar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {pines && pines.sinPin > 0 && !confirmaPin && (
+          <div>
+            {/* Dos formas, y la de por defecto es la buena: un PIN distinto por
+                persona. El comun sirve para arrancar en un dia, pero cualquiera
+                que sepa los 4 ultimos digitos de otro puede marcar por el. */}
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ display: 'block', marginBottom: 4 }}>
+                <input type="radio" checked={pinAleatorio}
+                       onChange={() => { setPinAleatorio(true); setAvisoPin(null); }} />
+                {' '}Un PIN distinto para cada uno <b>(recomendado)</b>
+                <div style={{ marginLeft: 22, fontSize: 12, color: 'var(--texto-tenue)' }}>
+                  Se genera al azar y la lista sale en pantalla <b>una sola vez</b>, para
+                  imprimirla. Después ya no se puede consultar ninguno.
+                </div>
+              </label>
+              <label style={{ display: 'block' }}>
+                <input type="radio" checked={!pinAleatorio}
+                       onChange={() => { setPinAleatorio(false); setAvisoPin(null); }} />
+                {' '}El mismo PIN para todos
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {!pinAleatorio && (
+                <>
+                  <label>PIN:</label>
+                  <input value={pinLote} maxLength={4} inputMode="numeric"
+                         onChange={e => { setPinLote(e.target.value.replace(/\D/g, '')); setAvisoPin(null); }}
+                         style={{ width: 70, letterSpacing: 4, textAlign: 'center' }} />
+                </>
+              )}
+              <button onClick={() => setConfirmaPin(true)}
+                      disabled={!pinAleatorio && !/^\d{4}$/.test(pinLote)}>
+                Asignárselo a los {pines.sinPin} que no tienen
+              </button>
+            </div>
+          </div>
+        )}
+
+        {confirmaPin && (
+          <div style={{ padding: 14, maxWidth: 640, borderRadius: 'var(--radio)',
+                        border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)' }}>
+            <p style={{ marginTop: 0 }}>
+              {pinAleatorio
+                ? <>¿Generar un PIN distinto para cada uno de los <b>{pines.sinPin}</b> clientes
+                    que no tienen ninguno?</>
+                : <>¿Ponerle el PIN <b>{pinLote}</b> a los <b>{pines.sinPin}</b> clientes que no
+                    tienen ninguno?</>}
+            </p>
+            <p style={{ color: 'var(--texto-suave)' }}>
+              A quien ya tenga PIN <b>no se le toca</b>.{' '}
+              {pinAleatorio
+                ? <>La lista de PIN aparecerá aquí <b>una sola vez</b>: se guardan cifrados y
+                    no se pueden volver a consultar. Imprímala o cópiela antes de cerrar
+                    esta pantalla.</>
+                : <>Como el PIN sería el mismo para todos ellos, sirve para empezar a marcar
+                    asistencia hoy, pero cualquiera que se sepa los últimos 4 dígitos de otro
+                    podría marcar por él.</>}
+              {' '}Cada cliente puede cambiarlo después desde su ficha.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={asignarPinEnLote} disabled={trabajandoPin}>
+                {trabajandoPin ? 'Asignando...'
+                  : (pinAleatorio ? 'Sí, generar los PIN' : 'Sí, asignar el PIN ' + pinLote)}
+              </button>
+              <button onClick={() => setConfirmaPin(false)} disabled={trabajandoPin}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {avisoPin && (
+          <div style={{ marginTop: 10, maxWidth: 640 }}>
+            {avisoPin.ok ? (
+              <>
+                <p style={{ color: 'var(--exito)', marginBottom: 6 }}>
+                  Listo: {avisoPin.asignados} cliente{avisoPin.asignados === 1 ? '' : 's'} con PIN.
+                </p>
+
+                {/* La unica vez que estos numeros se van a ver. Se quedan en
+                    pantalla hasta que se recargue: no se guardan en ningun
+                    sitio en claro, ni siquiera en auditoria. */}
+                {(avisoPin.generados || []).length > 0 && (
+                  <div style={{ padding: 12, marginBottom: 10, borderRadius: 'var(--radio)',
+                                border: '1px solid var(--acento)' }}>
+                    <b>Apunte o imprima esta lista ahora.</b> No se puede volver a ver.
+                    <div style={{ maxHeight: 260, overflowY: 'auto', marginTop: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left' }}>
+                            <th>Cliente</th><th>Documento</th><th>PIN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {avisoPin.generados.map(g => (
+                            <tr key={g.id}>
+                              <td>{g.nombre}</td>
+                              <td style={{ color: 'var(--texto-tenue)' }}>{g.documento}</td>
+                              <td style={{ letterSpacing: 3 }}><b>{g.pin}</b></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center',
+                                  flexWrap: 'wrap' }}>
+                      <button onClick={copiarListaPin}>Copiar la lista</button>
+                      {copiado && <span style={{ color: 'var(--exito)' }}>{copiado}</span>}
+                    </div>
+                  </div>
+                )}
+                {/* Dos clientes con los mismos 4 dígitos finales Y el mismo PIN son
+                    indistinguibles para el kiosco, que se quedaría con el primero. */}
+                {(avisoPin.choques || []).length > 0 && (
+                  <div style={{ padding: 12, borderRadius: 'var(--radio)',
+                                border: '1px solid var(--error)' }}>
+                    <b>Ojo: {avisoPin.choques.length} grupo(s) comparten los últimos 4
+                    dígitos.</b> Con el mismo PIN el kiosco no puede distinguirlos; dele a
+                    uno de cada grupo un PIN distinto desde su ficha:
+                    <ul style={{ marginBottom: 0 }}>
+                      {avisoPin.choques.map(ch => (
+                        <li key={ch.ult4}>
+                          …{ch.ult4}: {ch.clientes.map(c => c.nombre).join(', ')}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p style={{ color: 'var(--error)' }}>
+                {avisoPin.motivo === 'pin_invalido'
+                  ? 'El PIN tiene que ser de exactamente 4 dígitos.'
+                  : 'No se pudo asignar: ' + avisoPin.motivo}
+              </p>
+            )}
           </div>
         )}
       </section>

@@ -10,4 +10,8 @@ ipcMain.handle('membresias:listarPorCliente', (_evt, clienteId) => repo.listarPo
 ipcMain.handle('membresias:pagosDelDia', (_evt, fecha) => repo.pagosDelDia(fecha));
 ipcMain.handle('membresias:listarPagos', (_evt, membresiaId) => repo.listarPagos(membresiaId));
 
+// Tiquetes de una ticketera ya vendida: anadir, quitar y consultar.
+ipcMain.handle('membresias:ajustarTickets', (_evt, datos) => repo.ajustarTickets(datos));
+ipcMain.handle('membresias:estadoTickets', (_evt, membresiaId) => repo.estadoTickets(membresiaId));
+
 module.exports = {};

@@ -115,7 +115,15 @@ export default function Desarrollador() {
   async function vaciar() {
     setVaciando(true);
     setResultadoVaciar(null);
-    const r = await window.api.desarrollador.vaciar(marcadas);
+    // Sin este try, cualquier excepcion del proceso principal dejaba el boton
+    // en "Borrando..." para siempre y sin decir nada: la pantalla se quedaba
+    // esperando una promesa que ya se habia rechazado.
+    let r;
+    try {
+      r = await window.api.desarrollador.vaciar(marcadas);
+    } catch (e) {
+      r = { ok: false, motivo: 'error_inesperado', detalle: String(e && e.message ? e.message : e) };
+    }
     setVaciando(false);
     setResultadoVaciar(r);
     setConfirmaVaciar('');
@@ -330,7 +338,9 @@ export default function Desarrollador() {
               {resultadoVaciar.motivo === 'inventario_con_ventas'
                 ? 'El inventario no se puede vaciar solo: hay ' + resultadoVaciar.lineasDeVenta +
                   ' líneas de venta que apuntan a esos productos. Marca también "Ventas y caja", o deja el inventario como está.'
-                : 'No se pudo vaciar: ' + resultadoVaciar.motivo}
+                : resultadoVaciar.motivo === 'error_inesperado'
+                  ? 'No se pudo vaciar: ' + (resultadoVaciar.detalle || 'error inesperado')
+                  : 'No se pudo vaciar: ' + resultadoVaciar.motivo}
             </p>
           )}
 

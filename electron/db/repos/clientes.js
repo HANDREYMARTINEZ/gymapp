@@ -1,4 +1,5 @@
 const { getDb } = require('../connection');
+const { normalizarBusqueda } = require('../texto');
 
 // Cedula provisional para quien entra sin documento.
 //
@@ -40,13 +41,14 @@ function crear(cliente) {
   const documento = esProvisional ? siguienteDocumentoProvisional() : pedido;
   const ult4 = documento ? documento.slice(-4) : null;
   const info = getDb().prepare(`
-    INSERT INTO clientes (documento, documento_ult4, nombre, telefono, email, foto, f_nacimiento, f_registro, pin, contacto_emg, notas, activo, documento_provisional)
-    VALUES (@documento, @ult4, @nombre, @telefono, @email, @foto, @f_nacimiento, @f_registro, @pin, @contacto_emg, @notas, 1, @provisional)
+    INSERT INTO clientes (documento, documento_ult4, nombre, nombre_busqueda, telefono, email, foto, f_nacimiento, f_registro, pin, contacto_emg, notas, activo, documento_provisional)
+    VALUES (@documento, @ult4, @nombre, @nombreBusqueda, @telefono, @email, @foto, @f_nacimiento, @f_registro, @pin, @contacto_emg, @notas, 1, @provisional)
   `).run({
     documento,
     ult4,
     provisional: esProvisional ? 1 : 0,
     nombre: cliente.nombre,
+    nombreBusqueda: normalizarBusqueda(cliente.nombre),
     telefono: cliente.telefono || null,
     email: cliente.email || null,
     foto: cliente.foto || null,
@@ -59,15 +61,22 @@ function crear(cliente) {
   return info.lastInsertRowid;
 }
 
+// En el mostrador el nombre es la referencia principal, no la cedula: la
+// busqueda tiene que encontrar por nombre, por apellido, por el nombre completo
+// o por cualquier trozo, escrito como se escriba. Contra nombre_busqueda se
+// compara ya sin tildes y en minusculas; se deja tambien la comparacion contra
+// el nombre crudo por si alguna fila vieja no tuviera la columna rellena.
 function buscar(texto) {
   const like = `%${texto}%`;
+  const likeNorm = `%${normalizarBusqueda(texto)}%`;
   return getDb().prepare(`
     SELECT id, documento, nombre, telefono, activo
     FROM clientes
-    WHERE activo = 1 AND (nombre LIKE ? OR documento LIKE ?)
+    WHERE activo = 1
+      AND (nombre_busqueda LIKE ? OR nombre LIKE ? OR documento LIKE ?)
     ORDER BY nombre
     LIMIT 50
-  `).all(like, like);
+  `).all(likeNorm, like, like);
 }
 
 function obtenerPorId(id) {
@@ -106,11 +115,13 @@ function editar(id, cambios) {
   getDb().prepare(`
     UPDATE clientes SET
       documento = @documento, documento_ult4 = @ult4, nombre = @nombre,
+      nombre_busqueda = @nombreBusqueda,
       telefono = @telefono, email = @email, foto = @foto,
       f_nacimiento = @f_nacimiento, contacto_emg = @contacto_emg, notas = @notas,
       documento_provisional = @provisional
     WHERE id = @id
-  `).run({ ...cambios, documento, ult4, id, provisional });
+  `).run({ ...cambios, documento, ult4, id, provisional,
+           nombreBusqueda: normalizarBusqueda(cambios.nombre) });
   return true;
 }
 async function asignarPin(id, pinTextoPlano) {
@@ -124,6 +135,98 @@ async function asignarPin(id, pinTextoPlano) {
   const info = getDb().prepare(`UPDATE clientes SET pin = ? WHERE id = ?`).run(hash, id);
   if (info.changes === 0) return { ok: false, motivo: 'no_existe' };
   return { ok: true };
+}
+
+// Asignacion del PIN en lote, para los clientes que llegaron por el Excel: el
+// archivo no trae PIN a proposito, asi que los 109 importados entraron sin uno y
+// sin PIN no pueden marcar asistencia en el kiosco. Ponerselos a mano es una
+// tarde entera.
+//
+// El kiosco identifica por ULTIMOS 4 DEL DOCUMENTO + PIN, no por el PIN solo, asi
+// que un PIN comun no vuelve ambiguo a nadie mientras no haya dos clientes con
+// los mismos cuatro digitos finales. Los que si coincidan se devuelven en
+// `choques` para que la pantalla los cante: a esos hay que darles otro PIN.
+// Con `aleatorio` cada cliente recibe un PIN distinto y la funcion los devuelve
+// UNA sola vez, en claro, para poder imprimirlos: despues ya no hay forma de
+// leerlos -- se guardan con argon2 y eso no se deshace.
+async function asignarPinEnLote({ pin, usuarioId, incluirConPin = false, aleatorio = false } = {}) {
+  const limpio = String(pin == null ? '' : pin).trim();
+  if (!aleatorio && !/^\d{4}$/.test(limpio)) return { ok: false, motivo: 'pin_invalido' };
+
+  const db = getDb();
+  const candidatos = db.prepare(`
+    SELECT id, nombre, documento, documento_ult4 FROM clientes
+    WHERE activo = 1 ${incluirConPin ? '' : 'AND (pin IS NULL OR pin = \'\')'}
+    ORDER BY nombre
+  `).all();
+
+  if (candidatos.length === 0) return { ok: true, asignados: 0, choques: [], generados: [] };
+
+  // Con un PIN comun basta un hash reutilizado: con argon2 por cliente esto
+  // serian decenas de segundos con el proceso principal bloqueado, y no
+  // compraria nada -- el PIN es literalmente el mismo secreto para todos, asi
+  // que una sal por cliente no esconde nada que no se sepa ya. Con PIN aleatorio
+  // no hay atajo posible: cada uno es un secreto distinto y lleva su hash.
+  const argon2 = require('argon2');
+  const crypto = require('crypto');
+  const hashComun = aleatorio ? null : await argon2.hash(limpio);
+
+  const generados = [];
+  const hashes = new Map();
+  if (aleatorio) {
+    for (const c of candidatos) {
+      // randomInt del modulo crypto, no Math.random: es la llave de entrada del
+      // cliente al gimnasio, por pequena que sea.
+      const suyo = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+      hashes.set(c.id, await argon2.hash(suyo));
+      generados.push({ id: c.id, nombre: c.nombre, documento: c.documento, pin: suyo });
+    }
+  }
+
+  // Solo importa con PIN comun: si cada uno tiene el suyo, dos clientes con los
+  // mismos 4 digitos finales se distinguen igual por el PIN.
+  const choques = [];
+  if (!aleatorio) {
+    const porUlt4 = new Map();
+    for (const c of candidatos) {
+      const u = c.documento_ult4 || '';
+      if (!porUlt4.has(u)) porUlt4.set(u, []);
+      porUlt4.get(u).push({ id: c.id, nombre: c.nombre, documento: c.documento });
+    }
+    for (const [ult4, lista] of porUlt4) {
+      if (lista.length > 1) choques.push({ ult4, clientes: lista });
+    }
+  }
+
+  db.transaction(() => {
+    const poner = db.prepare(`UPDATE clientes SET pin = ? WHERE id = ?`);
+    for (const c of candidatos) poner.run(aleatorio ? hashes.get(c.id) : hashComun, c.id);
+    db.prepare(`
+      INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
+      VALUES (?, 'clientes_pin_lote', 'clientes', NULL, ?, ?)
+    `).run(usuarioId || null, new Date().toISOString(),
+           JSON.stringify({ asignados: candidatos.length,
+                            aleatorio: !!aleatorio,
+                            incluirConPin: !!incluirConPin,
+                            choquesUlt4: choques.length }));
+  })();
+
+  // Los PIN en claro NO se anotan en auditoria: viajan a la pantalla, se
+  // imprimen y ahi se acaban.
+  return { ok: true, asignados: candidatos.length, choques, generados };
+}
+
+// Lo que la pantalla necesita para decidir si ofrece el lote y con que numero:
+// cuantos clientes activos hay y a cuantos les falta el PIN.
+function pinesResumen() {
+  const f = getDb().prepare(`
+    SELECT COUNT(*) AS activos,
+           SUM(CASE WHEN pin IS NULL OR pin = '' THEN 1 ELSE 0 END) AS sinPin
+    FROM clientes WHERE activo = 1
+  `).get();
+  const activos = f.activos || 0;
+  const sinPin = f.sinPin || 0;
+  return { activos, sinPin, conPin: activos - sinPin };
 }
 
 // El PIN se guarda con argon2, asi que no se puede "leer" para mostrarlo: lo
@@ -203,7 +306,9 @@ function reactivar({ clienteId, usuarioId } = {}) {
 function listarDadosDeBaja() {
   return getDb().prepare(`
     SELECT c.id, c.documento, c.nombre, c.telefono, c.email,
-           a.fecha AS fechaBaja, a.detalle AS detalleBaja
+           -- 'localtime': la auditoria guarda UTC, y sin esto una baja hecha de
+           -- noche en UTC-5 se muestra con la fecha del dia siguiente.
+           date(a.fecha, 'localtime') AS fechaBaja, a.detalle AS detalleBaja
     FROM clientes c
     LEFT JOIN auditoria a ON a.id = (
       SELECT MAX(id) FROM auditoria
@@ -224,6 +329,7 @@ function listarDadosDeBaja() {
 
 module.exports = {
   crear, buscar, obtenerPorId, editar, asignarPin, tienePin, quitarPin,
+  asignarPinEnLote, pinesResumen,
   darDeBaja, reactivar, listarDadosDeBaja,
   siguienteDocumentoProvisional, PREFIJO_PROVISIONAL,
 };

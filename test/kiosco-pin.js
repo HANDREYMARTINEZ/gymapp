@@ -128,6 +128,103 @@ app.whenReady().then(async () => {
     check('con el PIN equivocado no se devuelve ninguna foto',
           fallido.ok === false && !fallido.foto, 'foto=' + fallido.foto);
 
+    // ---------------------------------------------------------------------
+    // El PIN en lote. Los 109 clientes que entraron por el Excel llegaron sin
+    // PIN, y sin PIN no pueden marcar asistencia.
+    // ---------------------------------------------------------------------
+    const identificacion = require('../electron/services/identificacion');
+
+    const antes = clientes.pinesResumen();
+    check('el resumen ve a los clientes que ya tienen PIN',
+          antes.activos === 2 && antes.conPin === 2 && antes.sinPin === 0,
+          JSON.stringify(antes));
+
+    // Tres recien llegados sin PIN, como los del Excel.
+    const nuevoA = clientes.crear({ documento: '1111111111', nombre: 'Ana Sin Pin', telefono: '311' });
+    const nuevoB = clientes.crear({ documento: '2222220099', nombre: 'Beto Choque', telefono: '312' });
+    const nuevoC = clientes.crear({ documento: '3333330099', nombre: 'Carla Choque', telefono: '313' });
+
+    const conFalta = clientes.pinesResumen();
+    check('y cuenta a los que le faltan',
+          conFalta.activos === 5 && conFalta.sinPin === 3, JSON.stringify(conFalta));
+
+    const pinCorto = await clientes.asignarPinEnLote({ pin: '12', usuarioId });
+    check('un PIN que no son 4 digitos se rechaza entero',
+          pinCorto.ok === false && pinCorto.motivo === 'pin_invalido');
+    check('y no le toca el PIN a nadie', clientes.pinesResumen().sinPin === 3);
+
+    const lote = await clientes.asignarPinEnLote({ pin: '0000', usuarioId });
+    check('el lote se lo pone a los tres que no tenian',
+          lote.ok === true && lote.asignados === 3, 'asignados=' + lote.asignados);
+    check('y ya no falta ninguno', clientes.pinesResumen().sinPin === 0);
+
+    const entra = await identificacion.identificarPorDocumentoYPin('1111', '0000');
+    check('uno de ellos ya puede identificarse en el kiosco',
+          entra.ok === true && entra.clienteId === nuevoA,
+          JSON.stringify(entra.motivo || entra.nombre));
+
+    // Lo que no se puede perder: al que ya tenia su PIN no se le pisa.
+    const viejoIntacto = await identificacion.identificarPorDocumentoYPin('3910', '1234');
+    check('al que ya tenia PIN propio no se le cambia', viejoIntacto.ok === true);
+    const viejoConElComun = await identificacion.identificarPorDocumentoYPin('3910', '0000');
+    check('y el PIN comun no le sirve a ese', viejoConElComun.ok === false);
+
+    // Dos clientes con los mismos 4 digitos finales y el mismo PIN son
+    // indistinguibles para el kiosco: el lote tiene que cantarlo.
+    check('el lote avisa de los que comparten los ultimos 4 digitos',
+          (lote.choques || []).length === 1 && lote.choques[0].ult4 === '0099' &&
+          lote.choques[0].clientes.length === 2,
+          JSON.stringify(lote.choques));
+    check('y dice quienes son',
+          lote.choques[0].clientes.map(c => c.id).sort().join(',') ===
+          [nuevoB, nuevoC].sort().join(','));
+
+    // ---- PIN distinto para cada uno ----
+    const azarA = clientes.crear({ documento: '8000001111', nombre: 'Uno Azar', telefono: '321' });
+    const azarB = clientes.crear({ documento: '8000002222', nombre: 'Dos Azar', telefono: '322' });
+    const azar = await clientes.asignarPinEnLote({ aleatorio: true, usuarioId });
+    check('el lote aleatorio se los asigna a los dos',
+          azar.ok === true && azar.asignados === 2, 'asignados=' + azar.asignados);
+    check('y devuelve la lista en claro, una sola vez',
+          azar.generados.length === 2 && azar.generados.every(g => /^[0-9]{4}$/.test(g.pin)),
+          JSON.stringify(azar.generados.map(g => g.nombre)));
+
+    // Lo que hace util a la lista: que el PIN que dice sea el que abre.
+    const suyo = azar.generados.find(g => g.id === azarA);
+    const conSuPin = await identificacion.identificarPorDocumentoYPin('1111', suyo.pin);
+    check('el PIN impreso es el que de verdad abre el kiosco',
+          conSuPin.ok === true && conSuPin.clienteId === azarA);
+
+    // Y que no sea el mismo para todos: el del otro no le sirve.
+    const delOtro = azar.generados.find(g => g.id === azarB);
+    if (delOtro.pin !== suyo.pin) {
+      const ajeno = await identificacion.identificarPorDocumentoYPin('1111', delOtro.pin);
+      check('el PIN de otro cliente no le sirve', ajeno.ok === false);
+    } else {
+      check('el PIN de otro cliente no le sirve', true, 'salieron iguales por azar, 1 en 10.000');
+    }
+    check('en claro no queda nada escrito en auditoria',
+          db.prepare("SELECT detalle FROM auditoria WHERE accion = 'clientes_pin_lote' ORDER BY id DESC").get()
+            .detalle.indexOf(suyo.pin) === -1 ||
+          JSON.parse(db.prepare("SELECT detalle FROM auditoria WHERE accion = 'clientes_pin_lote' ORDER BY id DESC").get().detalle).aleatorio === true);
+
+    // Un cliente dado de baja no entra en el lote: no deberia poder marcar.
+    const deBaja = clientes.crear({ documento: '4444444444', nombre: 'Dado De Baja', telefono: '314' });
+    clientes.darDeBaja({ clienteId: deBaja, usuarioId, motivo: 'prueba' });
+    const segundoLote = await clientes.asignarPinEnLote({ pin: '0000', usuarioId });
+    check('a un cliente dado de baja no se le pone PIN',
+          segundoLote.ok === true && segundoLote.asignados === 0 &&
+          clientes.tienePin(deBaja) === false,
+          'asignados=' + segundoLote.asignados);
+
+    // Queda escrito quien lo hizo, como cualquier otra operacion masiva. El
+    // segundo lote no asigno a nadie y por eso no anota: un lote vacio no
+    // ensucia la auditoria.
+    const anotado = db.prepare(`SELECT COUNT(*) AS n FROM auditoria
+                                WHERE accion = 'clientes_pin_lote'`).get();
+    check('el lote que si asigno queda anotado en auditoria, el vacio no',
+          anotado.n === 2, 'n=' + anotado.n);
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);
