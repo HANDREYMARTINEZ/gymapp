@@ -31,6 +31,8 @@
     "test:recordatorios": "electron test/recordatorios.js",
     "test:ensayo-correos": "electron test/ensayo-correos.js",
     "capturas": "vite build && electron scripts/capturas.js",
+    "ensayo:restauracion": "electron scripts/ensayo-restauracion.js",
+    "icono": "electron scripts/hacer-icono.js",
     "auditoria": "node scripts/auditoria-ipc.js",
     "camara": "electron scripts/diagnostico-camara.js",
     "huella": "electron scripts/diagnostico-huella.js",
@@ -104,6 +106,7 @@
       "buildResources": "build"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
