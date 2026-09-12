@@ -119,10 +119,12 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "GymApp",
+      "uninstallDisplayName": "GymApp",
       "deleteAppDataOnUninstall": false
     }
   }
