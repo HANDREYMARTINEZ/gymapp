@@ -71,14 +71,51 @@ function conectar() {
   });
 }
 
+// Un sidecar recien lanzado tarda en abrir su servidor. Medido el 12-sep en esta
+// maquina: la app intentaba conectar a los 28 ms y el 8383 no escuchaba hasta los
+// ~370 ms. La conexion rechazada falla AL INSTANTE -- el reloj de MS_CONEXION solo
+// cubre las que se cuelgan -- asi que el primer intento daba siempre 'sin_lector'
+// con el lector enchufado. El kiosco se traga ese error a proposito, y la huella se
+// quedaba sin escuchar durante toda esa visita al kiosco, sin un solo aviso.
+//
+// test/sidecar.js no lo veia porque espera 2,5 s despues de lanzar el proceso.
+// Seis segundos de margen: aqui van 370 ms, pero el PC de recepcion puede ser mas
+// lento, y en un arranque en frio .NET tarda bastante mas.
+const MS_ARRANQUE_SIDECAR = 6000;
+const MS_ENTRE_INTENTOS = 250;
+let conectandoSidecar = null;
+
 async function asegurarConexion() {
   if (estaAbierto()) return;
-  socket = null;
-  // El sidecar es un proceso aparte y lo arranca la app. Antes habia que abrirlo
-  // a mano desde Visual Studio y, si no estaba, aqui solo salia "sin lector".
-  const encendido = proceso.asegurarEncendido();
-  if (!encendido.ok) throw new Error(encendido.motivo);
-  await conectar();
+  // Dos llamadas a la vez (entrar al kiosco mientras se enrola) no pueden abrir
+  // dos sockets: el segundo pisaria al primero y los mensajes del lector
+  // llegarian a uno que ya nadie usa.
+  if (conectandoSidecar) return conectandoSidecar;
+
+  conectandoSidecar = (async () => {
+    socket = null;
+    // El sidecar es un proceso aparte y lo arranca la app. Antes habia que abrirlo
+    // a mano desde Visual Studio y, si no estaba, aqui solo salia "sin lector".
+    const encendido = proceso.asegurarEncendido();
+    if (!encendido.ok) throw new Error(encendido.motivo);
+
+    const limite = Date.now() + MS_ARRANQUE_SIDECAR;
+    for (;;) {
+      try {
+        await conectar();
+        return;
+      } catch (e) {
+        if (Date.now() >= limite) throw e;
+        await new Promise(r => setTimeout(r, MS_ENTRE_INTENTOS));
+      }
+    }
+  })();
+
+  try {
+    await conectandoSidecar;
+  } finally {
+    conectandoSidecar = null;
+  }
 }
 
 function manejarMensaje(data) {
