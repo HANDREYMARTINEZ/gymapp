@@ -115,13 +115,14 @@ app.whenReady().then(async () => {
     check('un cliente sin foto devuelve null, no un error',
           sinRetrato.ok === true && sinRetrato.foto === null, 'foto=' + sinRetrato.foto);
 
-    // Repetir la marca da "ya_registrado_hoy": tambien tiene que traer la foto,
-    // porque esa pantalla la ve el mostrador igual.
+    // Repetir la marca el mismo dia es un reingreso (salio y vuelve, decision de
+    // Andrey del 12-sep): tambien tiene que traer la foto, porque es justo la
+    // entrada que quien atiende mas necesita reconocer.
     const repetida = await handlers['kiosco:marcarPorPin'](null, { ult4: '3910', pin: '1234' });
-    check('al repetir la asistencia sigue saliendo la foto',
-          repetida.ok === false && repetida.motivo === 'ya_registrado_hoy' &&
+    check('al repetir la marca es un reingreso y sigue saliendo la foto',
+          repetida.ok === true && repetida.reingreso === true &&
           String(repetida.foto).startsWith('data:image/'),
-          'motivo=' + repetida.motivo);
+          'ok=' + repetida.ok + ' reingreso=' + repetida.reingreso + ' motivo=' + repetida.motivo);
 
     // Un PIN equivocado no identifica a nadie: no puede filtrar ninguna foto.
     const fallido = await handlers['kiosco:marcarPorPin'](null, { ult4: '3910', pin: '0000' });

@@ -16,6 +16,7 @@ import POS from './screens/POS';
 import Usuarios from './screens/Usuarios';
 import Dashboards from './screens/Dashboards';
 import Desarrollador from './screens/Desarrollador';
+import { instalarLectorGlobal } from './lector/lector';
 
 
 const CONSTRUIDAS = ['clientes', 'planes', 'kiosco', 'pos', 'inventario', 'caja', 'dashboards', 'usuarios', 'configuracion', 'desarrollador'];
@@ -69,6 +70,12 @@ export default function App() {
     // de volver lleva a donde estuvo otra persona.
     setHistorial([INICIAL]);
   }
+
+  // El lector de codigos de barras se instala aqui, arriba del todo, y no en
+  // Vender: es un teclado, y teclea en cualquier pantalla. Asi tambien el Login
+  // y el kiosco quedan protegidos de un escaneo que meta digitos en la
+  // contrasena o en el PIN. Ver src/lector/lector.js.
+  useEffect(() => instalarLectorGlobal(), []);
 
   useEffect(() => {
     window.api.setup.estado().then(estado => {

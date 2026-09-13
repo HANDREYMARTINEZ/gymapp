@@ -25,12 +25,17 @@ ipcMain.handle('kiosco:iniciarEscuchaHuella', async (evt) => {
   const templates = huellasRepo.cargarTodasLasHuellas();
   const ventana = evt.sender;
 
-  await sidecar.iniciarVerificacion(templates, (clienteId) => {
+  await sidecar.iniciarVerificacion(templates, async (clienteId) => {
     const resultado = asistenciasRepo.registrar({ clienteId, metodo: 'huella', registradoPor: null });
     const cliente = clientesRepo.obtenerPorId(clienteId);
-    const { conFoto } = require('./kiosco');
-    ventana.send('kiosco:huellaDetectada',
-      conFoto({ ...resultado, nombre: cliente ? cliente.nombre : null }, clienteId));
+    const { respuestaKiosco } = require('./kiosco');
+    // Si el lector se dispara justo cuando el usuario cierra la ventana, el
+    // send() sobre un sender destruido lanza -- y aqui no hay nadie arriba que
+    // lo recoja, porque esto lo llama el sidecar, no una promesa de la pantalla.
+    try {
+      ventana.send('kiosco:huellaDetectada',
+        await respuestaKiosco({ ...resultado, nombre: cliente ? cliente.nombre : null }, clienteId, 'huella'));
+    } catch (e) { /* ventana cerrada a media lectura */ }
   });
 
   return { ok: true, cantidad: templates.length };

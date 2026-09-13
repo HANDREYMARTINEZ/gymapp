@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('api', {
     eliminarRespaldo: (ruta) => ipcRenderer.invoke('dev:eliminarRespaldo', ruta),
     resetearPassword: (datos) => ipcRenderer.invoke('dev:resetearPassword', datos),
     usuarios: () => ipcRenderer.invoke('dev:usuarios'),
+    planes: () => ipcRenderer.invoke('dev:planes'),
+    eliminarPlan: (planId) => ipcRenderer.invoke('dev:eliminarPlan', planId),
     auditoria: (filtros) => ipcRenderer.invoke('dev:auditoria', filtros),
     sembrarDemo: () => ipcRenderer.invoke('dev:sembrarDemo'),
   },
@@ -116,7 +118,9 @@ productos: {
   editar: (id, cambios) => ipcRenderer.invoke('productos:editar', id, cambios),
   desactivar: (id) => ipcRenderer.invoke('productos:desactivar', id),
   activar: (id) => ipcRenderer.invoke('productos:activar', id),
-  ajustarStock: (datos) => ipcRenderer.invoke('productos:ajustarStock', datos),
+  buscarPorCodigo: (codigo) => ipcRenderer.invoke('productos:buscarPorCodigo', codigo),
+  moverLote: (datos) => ipcRenderer.invoke('productos:moverLote', datos),
+  motivosSalida: () => ipcRenderer.invoke('productos:motivosSalida'),
   listarBajoMinimo: () => ipcRenderer.invoke('productos:listarBajoMinimo'),
   historialStock: (id) => ipcRenderer.invoke('productos:historialStock', id),
 },
@@ -199,6 +203,15 @@ kiosco: {
   marcarPorPin: (datos) => ipcRenderer.invoke('kiosco:marcarPorPin', datos),
   iniciarEscuchaHuella: () => ipcRenderer.invoke('kiosco:iniciarEscuchaHuella'),
   onHuellaDetectada: (callback) => ipcRenderer.on('kiosco:huellaDetectada', (_evt, data) => callback(data)),
+},
+
+// El Arduino que suelta el electroiman. Ver electron/services/puerta.js.
+puerta: {
+  estado: () => ipcRenderer.invoke('puerta:estado'),
+  puertos: () => ipcRenderer.invoke('puerta:puertos'),
+  detectar: () => ipcRenderer.invoke('puerta:detectar'),
+  guardar: (datos) => ipcRenderer.invoke('puerta:guardar', datos),
+  probar: () => ipcRenderer.invoke('puerta:probar'),
 },
 
 

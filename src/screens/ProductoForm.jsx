@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
 import SelectorImagen from '../components/SelectorImagen';
+import { useCodigoEscaneado } from '../lector/lector';
 
-export default function ProductoForm({ productoExistente, onGuardado, onCancelar }) {
+// codigoInicial: cuando se llega aqui desde "este codigo no esta registrado",
+// el producto nace con el codigo que se acaba de escanear ya puesto.
+// sinStockInicial: desde una Entrada de mercancia el stock lo pone la entrada;
+// pedirlo tambien aqui lo contaria dos veces.
+export default function ProductoForm({ productoExistente, codigoInicial, sinStockInicial, onGuardado, onCancelar }) {
   const [form, setForm] = useState({
     nombre: '', categoria: '', p_venta: '', p_costo: '',
-    stock: '', stock_min: '', codigo_barras: '', fuera_de_caja: false,
+    stock: '', stock_min: '', codigo_barras: codigoInicial || '', fuera_de_caja: false,
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +38,20 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
     setForm({ ...form, [campo]: valor });
     setError('');
   }
+
+  // Escanear con el formulario abierto rellena el codigo, este donde este el
+  // cursor. Y se comprueba en el acto si ya lo tiene otro producto: antes solo se
+  // sabia al pulsar Guardar, despues de haber escrito nombre, precios y todo.
+  useCodigoEscaneado(async (codigo) => {
+    setForm(f => ({ ...f, codigo_barras: codigo }));
+    const otro = await window.api.productos.buscarPorCodigo(codigo);
+    if (otro && (!productoExistente || otro.id !== productoExistente.id)) {
+      setError('Ese código ya lo tiene «' + otro.nombre + '»'
+        + (otro.activo ? '' : ' (desactivado)') + '.');
+    } else {
+      setError('');
+    }
+  });
 
   async function guardar() {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio.'); return; }
@@ -65,7 +84,7 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
         : 'No se pudo guardar: ' + r.motivo);
       return;
     }
-    onGuardado();
+    onGuardado(r);
   }
 
   return (
@@ -77,17 +96,18 @@ export default function ProductoForm({ productoExistente, onGuardado, onCancelar
       <br /><input type="number" placeholder="Precio de venta *" value={form.p_venta} onChange={e => cambiar('p_venta', e.target.value)} style={{ marginTop: 6 }} />
       <br /><input type="number" placeholder="Precio de costo" value={form.p_costo} onChange={e => cambiar('p_costo', e.target.value)} style={{ marginTop: 6 }} />
 
-      {!editando && (
+      {!editando && !sinStockInicial && (
         <><br /><input type="number" placeholder="Stock inicial" value={form.stock} onChange={e => cambiar('stock', e.target.value)} style={{ marginTop: 6 }} /></>
       )}
 
       <br /><input type="number" placeholder="Stock mínimo (avisa al llegar aquí)" value={form.stock_min} onChange={e => cambiar('stock_min', e.target.value)} style={{ marginTop: 6, width: '100%' }} />
-      <br /><input placeholder="Código de barras (opcional)" value={form.codigo_barras} onChange={e => cambiar('codigo_barras', e.target.value)} style={{ marginTop: 6, width: '100%' }} />
+      <br /><input placeholder="Código de barras (opcional — escanéalo)" value={form.codigo_barras} onChange={e => cambiar('codigo_barras', e.target.value)} style={{ marginTop: 6, width: '100%' }} />
 
       {editando && (
         <p style={{ color: 'var(--texto-suave)', fontSize: 13 }}>
-          El stock no se edita aquí: se mueve desde <b>Ajustar stock</b>, para que
-          cada cambio quede con su motivo.
+          El stock no se edita aquí: se mueve con <b>Entrada</b> o <b>Salida de
+          mercancía</b> (o el botón <b>Stock</b> del producto), para que cada
+          cambio quede con su motivo.
         </p>
       )}
 

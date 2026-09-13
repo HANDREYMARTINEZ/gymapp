@@ -11,6 +11,22 @@ const MENSAJES = {
   saldo_pendiente: { color: 'var(--error)', texto: 'Saldo pendiente — pasa a recepción' },
   vencida: { color: 'var(--error)', texto: 'Tu membresía venció — pasa a recepción' },
   agotada: { color: 'var(--error)', texto: 'Tickets agotados — pasa a recepción' },
+  // Solo llega por un reingreso: vino hoy y despues recepcion le anulo la membresia.
+  anulada: { color: 'var(--error)', texto: 'Membresía anulada — pasa a recepción' },
+};
+
+// La puerta no cambia el veredicto: si la persona puede entrenar, su asistencia
+// ya quedo registrada aunque el Arduino este desenchufado. Por eso esto es una
+// linea pequena debajo del "Bienvenido" y no un mensaje de error: lo unico que
+// tiene que decir es si hay que abrirle a mano.
+//
+// 'desactivada' no pinta nada. En un gimnasio sin puerta automatica -- que es
+// como funciona hoy -- una linea permanente diciendo "puerta desactivada" seria
+// ruido en todas las entradas del dia.
+const PUERTA = {
+  abierta: { color: 'var(--texto)', texto: 'Puerta abierta — pasa' },
+  abriendo: { color: 'var(--texto)', texto: 'Abriendo la puerta...' },
+  fallo: { color: 'var(--aviso)', texto: 'La puerta no respondió — pide que te abran' },
 };
 
 export default function Kiosco() {
@@ -99,8 +115,15 @@ export default function Kiosco() {
       bloque = (
         <div style={{ background: esPorVencer ? 'var(--aviso-solido)' : 'var(--exito-solido)', color: 'var(--texto)', padding: 30, borderRadius: 8, textAlign: 'center', fontSize: 28 }}>
           {retrato(resultado.nombre)}
-          ✔ Bienvenido, {resultado.nombre}
+          {/* El reingreso lo dice distinto: quien atiende tiene que poder notar a
+              simple vista que esa persona ya habia entrado hoy. */}
+          ✔ {resultado.reingreso ? 'Bienvenido de nuevo' : 'Bienvenido'}, {resultado.nombre}
           {esPorVencer && <div style={{ fontSize: 16, marginTop: 8 }}>Tu membresía está por vencer</div>}
+          {PUERTA[resultado.puerta] && (
+            <div style={{ fontSize: 15, marginTop: 10, opacity: 0.9, color: PUERTA[resultado.puerta].color }}>
+              {PUERTA[resultado.puerta].texto}
+            </div>
+          )}
         </div>
       );
     } else {

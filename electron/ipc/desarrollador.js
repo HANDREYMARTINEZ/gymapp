@@ -87,6 +87,25 @@ ipcMain.handle('dev:resetearPassword', conPermiso(async (_evt, { usuarioId, pass
 
 ipcMain.handle('dev:usuarios', conPermiso(() => ({ ok: true, usuarios: usuariosRepo.listar() })));
 
+ipcMain.handle('dev:planes', conPermiso(() => ({ ok: true, planes: mantenimiento.planesConUso() })));
+
+// Borrar un plan que ninguna membresia usa (ver mantenimiento.eliminarPlan).
+// Primero se mira si se puede: dejar un respaldo para luego negarse seria llenar
+// la carpeta de copias por nada. La comprobacion de verdad se repite dentro de la
+// transaccion del borrado.
+ipcMain.handle('dev:eliminarPlan', conPermiso(async (_evt, planId) => {
+  const previo = mantenimiento.planesConUso().find(p => p.id === planId);
+  if (!previo) return { ok: false, motivo: 'plan_no_existe' };
+  if (previo.membresias > 0) {
+    return { ok: false, motivo: 'plan_con_membresias', membresias: previo.membresias, nombre: previo.nombre };
+  }
+
+  const respaldo = await respaldoDeSeguridad();
+  const r = mantenimiento.eliminarPlan(planId);
+  if (r.ok) anotarAuditoria('plan_eliminado', JSON.stringify(r.plan));
+  return { ...r, respaldo };
+}));
+
 ipcMain.handle('dev:auditoria', conPermiso((_evt, filtros) => ({
   ok: true,
   filas: mantenimiento.auditoria(filtros),

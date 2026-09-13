@@ -66,6 +66,23 @@ function puedeEntrenar(estado) {
   return ESTADOS_QUE_DEJAN_ENTRAR.includes(estado);
 }
 
+// Volver a entrar el MISMO dia, por la puerta del kiosco (salir al carro y
+// volver). No es una segunda asistencia: al entrar por la manana ya se valido
+// vigencia, saldo y tiquete, y eso cubre el dia.
+//
+// 'agotada' deja volver a proposito: si alguien gasto hoy su ultimo tiquete, el
+// tiquete de hoy cubre el dia entero. Decision de Andrey del 12-sep-2026. Lo que
+// NO deja volver es lo que recepcion hace despues de que entrara: anularla,
+// pausarla, moverle las fechas.
+//
+// Se evalua sobre la membresia que se uso HOY, no sobre la gobernante: la que
+// importa es la que pago la entrada de hoy.
+const ESTADOS_QUE_DEJAN_VOLVER = [...ESTADOS_QUE_DEJAN_ENTRAR, 'agotada'];
+
+function puedeReingresar(estado) {
+  return ESTADOS_QUE_DEJAN_VOLVER.includes(estado);
+}
+
 function elegirTicketeraParaConsumo(ticketerasActivas) {
   const conTickets = ticketerasActivas.filter(t => (t.tickets_totales - t.tickets_usados) > 0);
   if (conTickets.length === 0) return null;
@@ -80,4 +97,5 @@ function elegirTicketeraParaConsumo(ticketerasActivas) {
 module.exports = {
   diasEntre, estadoMembresia, calcularFechaInicioRenovacion, elegirTicketeraParaConsumo,
   elegirMembresiaGobernante, puedeEntrenar, ESTADOS_QUE_DEJAN_ENTRAR,
+  puedeReingresar, ESTADOS_QUE_DEJAN_VOLVER,
 };

@@ -23,6 +23,7 @@ require('./ipc/intercambio');
 require('./ipc/desarrollador');
 require('./ipc/portapapeles');
 require('./ipc/recordatorios');
+require('./ipc/puerta');
 
 
 
@@ -88,6 +89,12 @@ app.whenReady().then(() => {
   // eso se puede arrancar aqui sin esperar a nada.
   require('./services/recordatorios').iniciarProgramador();
 
+  // El Arduino de la puerta. Abrir el puerto serie resetea la placa y eso cuesta
+  // un par de segundos; pagarlos aqui, al arrancar, evita que se los coma el
+  // primer cliente que marque por la manana. Si no hay placa no pasa nada: la
+  // puerta es un accesorio y el kiosco funciona sin ella.
+  try { require('./services/puerta').arrancar(); } catch (e) {}
+
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
   } else {
@@ -101,6 +108,10 @@ app.on('window-all-closed', async () => {
   // El sidecar es un proceso hijo: si no se cierra aqui, cada arranque deja otro
   // vivo peleando por el puerto 8383 con el anterior.
   try { require('./services/sidecarProceso').apagar(); } catch (e) {}
+
+  // Mientras la app tenga el puerto abierto, el IDE de Arduino no puede grabar
+  // la placa: solo cabe un programa por COM.
+  try { await require('./services/puerta').cerrar(); } catch (e) {}
 
   try {
     const backupService = require('./services/backup');

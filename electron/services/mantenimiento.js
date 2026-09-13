@@ -13,7 +13,8 @@ const FLAG_RESET = 'reset-pendiente.flag';
 // Las zonas son los tres bloques en que se puede partir la base sin dejarla
 // incoherente. No hay zona de "planes" ni de "usuarios": los planes son el
 // catalogo y los usuarios no se borran nunca (medio historial apunta a ellos),
-// asi que un vaciado los conserva siempre.
+// asi que un vaciado los conserva siempre. Los planes se borran de UNO en uno,
+// y solo los que ninguna membresia usa: ver eliminarPlan().
 //
 // El orden de los DELETE dentro de cada zona es el orden de las claves foraneas,
 // de hijo a padre. Con foreign_keys = ON, hacerlo al reves no borra a medias:
@@ -206,6 +207,51 @@ function vaciar(zonas) {
   return { ok: true, zonas: pedidas, borrados };
 }
 
+// ------------------------------------------------------------------ planes
+//
+// Borrar un plan del catalogo. Hasta el 12-sep-2026 solo se podian desactivar, y
+// en la base real se acumulaban seis desactivados ("Dia", "Dia " con un espacio,
+// "Anual ", "Trimestral"...) que nadie habia vendido nunca.
+//
+// Solo se borra un plan que NINGUNA membresia usa, tampoco una anulada.
+// membresias.plan_id es obligatorio y apunta a planes: un plan con membresias no
+// se puede borrar sin llevarse por delante esas membresias, con sus pagos y
+// asistencias -- historial de clientes de verdad. Igual que el inventario con
+// ventas, el panel se frena y dice cuantas lo bloquean. Para esos esta
+// "Desactivar" en la pantalla de Planes.
+
+function planesConUso() {
+  return getDb().prepare(`
+    SELECT p.id, p.nombre, p.tipo, p.precio, p.activo,
+           (SELECT COUNT(*) FROM membresias m WHERE m.plan_id = p.id) AS membresias,
+           (SELECT COUNT(*) FROM membresias m WHERE m.plan_id = p.id AND m.anulada = 1) AS anuladas
+    FROM planes p
+    ORDER BY p.activo DESC, p.nombre
+  `).all().map(p => ({
+    ...p,
+    // "Dia" y "Dia " se ven iguales en una tabla. Antes de borrar uno hay que
+    // poder saber cual es.
+    nombreConEspacios: p.nombre !== p.nombre.trim(),
+  }));
+}
+
+function eliminarPlan(planId) {
+  const db = getDb();
+  const borrar = db.transaction(() => {
+    const plan = db.prepare('SELECT id, nombre, tipo, precio, activo FROM planes WHERE id = ?').get(planId);
+    if (!plan) return { ok: false, motivo: 'plan_no_existe' };
+
+    // Se cuenta DENTRO de la transaccion: si entre que se pinto la lista y se
+    // pulso borrar alguien vendio ese plan, aqui se ve.
+    const n = db.prepare('SELECT COUNT(*) AS n FROM membresias WHERE plan_id = ?').get(planId).n;
+    if (n > 0) return { ok: false, motivo: 'plan_con_membresias', membresias: n, nombre: plan.nombre };
+
+    db.prepare('DELETE FROM planes WHERE id = ?').run(planId);
+    return { ok: true, plan };
+  });
+  return borrar();
+}
+
 // Lectura de la tabla auditoria. Se escribe desde hace tiempo -- accesos de
 // desarrollador, anulaciones de venta, ajustes de stock -- pero hasta ahora no
 // habia forma de leerla sin abrir el gym.db con una herramienta de SQLite.
@@ -270,5 +316,6 @@ function borrarCopiasAntiguas() {
 module.exports = {
   ZONAS, FLAG_RESET, TOPE_AUDITORIA,
   diagnostico, conteos, resumenZonas, vaciar, auditoria, accionesAuditadas,
+  planesConUso, eliminarPlan,
   marcarResetDeFabrica, borrarCopiasAntiguas, copiasAntiguas,
 };

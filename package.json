@@ -8,7 +8,7 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "build:vite": "vite build",
-    "test": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js && electron test/desbloqueo.js && electron test/imagenes.js && electron test/membresias.js && electron test/panel-clientes.js && electron test/huellas.js && electron test/fuera-de-caja.js && electron test/arranque.js && electron test/caja-detalle.js && electron test/intercambio.js && electron test/sidecar.js && electron test/kiosco-pin.js && electron test/productos.js && electron test/caja.js && electron test/ventas.js && electron test/usuarios.js && electron test/dashboard.js && electron test/desarrollador.js && electron test/documento-provisional.js && electron test/recordatorios.js && electron test/ensayo-correos.js",
+    "test": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js && electron test/desbloqueo.js && electron test/imagenes.js && electron test/membresias.js && electron test/panel-clientes.js && electron test/huellas.js && electron test/fuera-de-caja.js && electron test/arranque.js && electron test/caja-detalle.js && electron test/intercambio.js && electron test/sidecar.js && electron test/kiosco-pin.js && electron test/puerta.js && electron test/lector.js && electron test/productos.js && electron test/caja.js && electron test/ventas.js && electron test/usuarios.js && electron test/dashboard.js && electron test/desarrollador.js && electron test/documento-provisional.js && electron test/recordatorios.js && electron test/ensayo-correos.js",
     "test:respaldos": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js",
     "test:desbloqueo": "electron test/desbloqueo.js",
     "test:imagenes": "electron test/imagenes.js",
@@ -21,6 +21,8 @@
     "test:intercambio": "electron test/intercambio.js",
     "test:sidecar": "electron test/sidecar.js",
     "test:kiosco-pin": "electron test/kiosco-pin.js",
+    "test:puerta": "electron test/puerta.js",
+    "test:lector": "electron test/lector.js && vite build && electron test/lector-ventana.js",
     "test:productos": "electron test/productos.js",
     "test:caja": "electron test/caja.js",
     "test:ventas": "electron test/ventas.js",
@@ -35,12 +37,14 @@
     "icono": "electron scripts/hacer-icono.js",
     "auditoria": "node scripts/auditoria-ipc.js",
     "camara": "electron scripts/diagnostico-camara.js",
+    "puerta": "electron scripts/diagnostico-puerta.js",
+    "lector": "electron scripts/diagnostico-lector.js",
     "huella": "electron scripts/diagnostico-huella.js",
     "huella:visible": "cross-env GYMAPP_SIDECAR_VISIBLE=1 electron scripts/diagnostico-huella.js --visible",
     "huella:muestra": "electron scripts/muestra-sdk.js",
     "build": "vite build && electron-builder --win",
     "build:dir": "vite build && electron-builder --win --dir",
-    "test:produccion": "vite build && electron test/produccion.js"
+    "test:produccion": "vite build && electron test/produccion.js && electron test/lector-ventana.js"
   },
   "keywords": [],
   "author": "H.A.M.C Solutions",
@@ -65,6 +69,7 @@
     "nodemailer": "^10.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "serialport": "^13.0.0",
     "uuid": "^14.0.2"
   },
   "allowScripts": {
@@ -99,7 +104,8 @@
     "asar": true,
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
-      "**/node_modules/argon2/**"
+      "**/node_modules/argon2/**",
+      "**/node_modules/@serialport/**"
     ],
     "directories": {
       "output": "dist-electron",

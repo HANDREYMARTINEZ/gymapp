@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Miniatura from '../components/Miniatura';
+import { useCodigoEscaneado } from '../lector/lector';
 
 const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
 
@@ -30,6 +31,17 @@ export default function POS({ usuarioActual }) {
   const [ultimaVenta, setUltimaVenta] = useState(null);
   const [cobrando, setCobrando] = useState(false);
   const buscador = useRef(null);
+  // Lo que pasa al escanear o al tocar un producto sale junto al buscador, que
+  // es donde se esta mirando, y no abajo en el carrito como el error de cobro.
+  const [aviso, setAviso] = useState(null);
+  const relojAviso = useRef(null);
+
+  function avisar(tipo, texto) {
+    if (relojAviso.current) clearTimeout(relojAviso.current);
+    setAviso({ tipo, texto });
+    // El "+1" se va solo; un problema se queda hasta la siguiente accion.
+    if (tipo === 'ok') relojAviso.current = setTimeout(() => setAviso(null), 2500);
+  }
 
   async function cargar() {
     const lista = await window.api.productos.listar();
@@ -53,7 +65,16 @@ export default function POS({ usuarioActual }) {
         || (p.codigo_barras || '').includes(texto))
     : productos;
 
+  // Devuelve el problema si no se puede agregar, o null. Antes se podia meter en
+  // el carrito mas de lo que habia y el fallo salia al cobrar, con la fila
+  // hecha; ahora sale al tocar o al escanear, que es cuando se puede hacer algo.
   function agregar(producto) {
+    const enCarrito = (carrito.find(l => l.productoId === producto.id) || {}).cantidad || 0;
+    if (enCarrito + 1 > producto.stock) {
+      return producto.stock <= 0
+        ? '«' + producto.nombre + '» no tiene existencias.'
+        : 'De «' + producto.nombre + '» sólo hay ' + producto.stock + ' en existencia.';
+    }
     setError('');
     setUltimaVenta(null);
     setCarrito(prev => {
@@ -67,7 +88,27 @@ export default function POS({ usuarioActual }) {
         fueraDeCaja: !!producto.fuera_de_caja,
       }];
     });
+    return null;
   }
+
+  function agregarYAvisar(producto) {
+    const problema = agregar(producto);
+    if (problema) avisar('error', problema);
+    else avisar('ok', '+1  ' + producto.nombre);
+  }
+
+  // El lector, este donde este el cursor: en la cantidad de una linea, en el
+  // medio de pago o en ninguna parte. Crear productos queda para el admin en
+  // Inventario (decision de Andrey del 12-sep-2026): aqui solo se avisa.
+  useCodigoEscaneado(async (codigo) => {
+    const p = await window.api.productos.buscarPorCodigo(codigo);
+    if (!p) {
+      avisar('error', 'El código ' + codigo + ' no está registrado. Hay que crearlo en Inventario.');
+      return;
+    }
+    if (!p.activo) { avisar('error', '«' + p.nombre + '» está desactivado.'); return; }
+    agregarYAvisar(p);
+  });
 
   function cambiarCantidad(productoId, cantidad) {
     setError('');
@@ -87,13 +128,13 @@ export default function POS({ usuarioActual }) {
 
     const porCodigo = await window.api.productos.obtenerPorCodigo(texto);
     if (porCodigo) {
-      agregar(porCodigo);
+      agregarYAvisar(porCodigo);
       setBusqueda('');
       return;
     }
     const coincidencias = visibles;
     if (coincidencias.length === 1) {
-      agregar(coincidencias[0]);
+      agregarYAvisar(coincidencias[0]);
       setBusqueda('');
     }
   }
@@ -152,6 +193,14 @@ export default function POS({ usuarioActual }) {
                  onKeyDown={e => { if (e.key === 'Enter') porEnter(); }}
                  style={{ width: '100%', padding: 6 }} />
 
+          {aviso && (
+            <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 'var(--radio)',
+                          border: '1px solid ' + (aviso.tipo === 'ok' ? 'var(--exito)' : 'var(--error)'),
+                          color: aviso.tipo === 'ok' ? 'var(--exito)' : 'var(--error)' }}>
+              {aviso.tipo === 'ok' ? '✔ ' : ''}{aviso.texto}
+            </div>
+          )}
+
           {/* 5.13: cuadricula simetrica en vez de tabla. La tarjeta entera es el
               boton: en un mostrador se pulsa la foto del producto, no una
               columna de "Agregar" alineada a la derecha. */}
@@ -166,7 +215,7 @@ export default function POS({ usuarioActual }) {
               return (
                 <button
                   key={p.id}
-                  onClick={() => agregar(p)}
+                  onClick={() => agregarYAvisar(p)}
                   disabled={agotado}
                   title={p.nombre}
                   style={{

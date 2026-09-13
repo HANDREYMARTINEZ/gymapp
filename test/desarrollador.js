@@ -78,6 +78,7 @@ app.whenReady().then(async () => {
     imagenes.guardar({ entidad: 'cliente', entidadId: cliente, base64: Buffer.from('foto').toString('base64') });
 
     const contar = (t) => db.prepare('SELECT COUNT(*) AS n FROM ' + t).get().n;
+    const backupServicePlanes = () => require('../electron/services/backup').listarRespaldos();
 
     // ---- La puerta ------------------------------------------------------
     sesionDev.desactivar();
@@ -163,6 +164,85 @@ app.whenReady().then(async () => {
     check('no quedan productos ni ventas ni lineas',
           contar('productos') === 0 && contar('ventas') === 0 && contar('venta_items') === 0);
     check('ni sesiones de caja', contar('caja_sesiones') === 0);
+
+    // ---- Borrar planes ---------------------------------------------------
+    //
+    // Solo los que ninguna membresia usa, TAMPOCO una anulada: membresias.plan_id
+    // es obligatorio, y borrar un plan usado exigiria llevarse el historial de
+    // esos clientes. En la base real habia seis desactivados sin vender nunca.
+    const usado = planes.crear({ nombre: 'Personalizado Mes', tipo: 'periodo', precio: 200000, dias_duracion: 30 });
+    const soloAnulada = planes.crear({ nombre: 'Promo vieja', tipo: 'periodo', precio: 10000, dias_duracion: 30 });
+    const libreActivo = planes.crear({ nombre: 'Semana', tipo: 'periodo', precio: 30000, dias_duracion: 7 });
+    const libreInactivo = planes.crear({ nombre: 'Dia', tipo: 'ticketera', precio: 12000, num_tickets: 1 });
+    planes.desactivar(libreInactivo);
+    // El mismo nombre con un espacio al final, como en la base real.
+    db.prepare("INSERT INTO planes (nombre, tipo, precio, num_tickets, activo) VALUES ('Dia ', 'ticketera', 12000, 1, 0)").run();
+    const conEspacio = db.prepare("SELECT id FROM planes WHERE nombre = 'Dia '").get().id;
+
+    const socia = clientes.crear({ documento: '222', nombre: 'Socia', telefono: '301' });
+    membresias.vender({ clienteId: socia, planId: usado, usuarioId: admin.id });
+    const aAnular = membresias.vender({ clienteId: socia, planId: soloAnulada, usuarioId: admin.id });
+    const anulo = membresias.anular({ membresiaId: aAnular, usuarioId: admin.id, motivo: 'prueba' });
+    check('hay un plan cuya unica membresia esta anulada', anulo.ok === true, anulo.motivo);
+
+    sesionDev.desactivar();
+    check('sin sesion de desarrollador no se listan los planes',
+          (await handlers['dev:planes'](null)).motivo === 'sin_sesion_desarrollador');
+    const planSinPermiso = await handlers['dev:eliminarPlan'](null, libreActivo);
+    check('ni se borra ninguno', planSinPermiso.motivo === 'sin_sesion_desarrollador' &&
+          !!db.prepare('SELECT 1 FROM planes WHERE id = ?').get(libreActivo));
+    await handlers['auth:accesoDesarrollador'](null, PASSPHRASE);
+
+    const listaPlanes = (await handlers['dev:planes'](null)).planes;
+    const de = (id) => listaPlanes.find(x => x.id === id);
+    check('la lista trae cuantas membresias usa cada plan',
+          de(usado).membresias === 1 && de(libreActivo).membresias === 0 && de(soloAnulada).membresias === 1,
+          JSON.stringify(listaPlanes.map(x => [x.nombre, x.membresias])));
+    check('y cuantas de ellas estan anuladas', de(soloAnulada).anuladas === 1 && de(usado).anuladas === 0);
+    check('y marca el nombre con espacios de mas', de(conEspacio).nombreConEspacios === true && de(libreInactivo).nombreConEspacios === false);
+
+    const respaldosAntesPlan = backupServicePlanes().length;
+    const noUsado = await handlers['dev:eliminarPlan'](null, usado);
+    check('un plan con membresias NO se borra',
+          noUsado.ok === false && noUsado.motivo === 'plan_con_membresias' && noUsado.membresias === 1, JSON.stringify(noUsado));
+    check('y sigue ahi, con su membresia intacta',
+          !!db.prepare('SELECT 1 FROM planes WHERE id = ?').get(usado) &&
+          db.prepare('SELECT COUNT(*) AS n FROM membresias WHERE plan_id = ?').get(usado).n === 1);
+    check('negarse no deja un respaldo por nada', backupServicePlanes().length === respaldosAntesPlan);
+
+    const noAnulada = await handlers['dev:eliminarPlan'](null, soloAnulada);
+    check('tampoco uno cuya unica membresia esta anulada',
+          noAnulada.ok === false && noAnulada.motivo === 'plan_con_membresias');
+
+    const borraInactivo = await handlers['dev:eliminarPlan'](null, libreInactivo);
+    check('un plan desactivado que nadie uso se borra', borraInactivo.ok === true &&
+          !db.prepare('SELECT 1 FROM planes WHERE id = ?').get(libreInactivo), borraInactivo.motivo);
+    check('borra ESE, no su gemelo con espacio al final',
+          !!db.prepare('SELECT 1 FROM planes WHERE id = ?').get(conEspacio));
+    check('deja un respaldo antes de borrar el plan', borraInactivo.respaldo.hecho === true, borraInactivo.respaldo.motivo);
+    const auditado = db.prepare("SELECT detalle FROM auditoria WHERE accion = 'plan_eliminado' ORDER BY id DESC").get();
+    check('y lo anota en auditoria con lo que era',
+          auditado && JSON.parse(auditado.detalle).nombre === 'Dia' && JSON.parse(auditado.detalle).precio === 12000);
+
+    const borraActivo = await handlers['dev:eliminarPlan'](null, libreActivo);
+    check('un plan activo que nadie ha vendido tambien se puede borrar', borraActivo.ok === true);
+
+    check('borrar un plan que ya no existe se dice',
+          (await handlers['dev:eliminarPlan'](null, libreActivo)).motivo === 'plan_no_existe');
+
+    // Si alguien vende el plan entre que se pinta la lista y se pulsa borrar, la
+    // comprobacion dentro de la transaccion lo para.
+    const carrera = planes.crear({ nombre: 'Recien vendido', tipo: 'periodo', precio: 1000, dias_duracion: 1 });
+    membresias.vender({ clienteId: socia, planId: carrera, usuarioId: admin.id });
+    const enCarrera = mantenimiento.eliminarPlan(carrera);
+    check('la comprobacion se repite dentro del borrado',
+          enCarrera.ok === false && enCarrera.motivo === 'plan_con_membresias' &&
+          !!db.prepare('SELECT 1 FROM planes WHERE id = ?').get(carrera));
+
+    // Se deja la base como la esperan las comprobaciones de despues.
+    db.prepare('DELETE FROM membresias').run();
+    db.prepare('DELETE FROM clientes WHERE id = ?').run(socia);
+    for (const id of [usado, soloAnulada, conEspacio, carrera]) db.prepare('DELETE FROM planes WHERE id = ?').run(id);
 
     // ---- Respaldos -------------------------------------------------------
     const backupService = require('../electron/services/backup');

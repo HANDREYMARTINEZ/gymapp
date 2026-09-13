@@ -1,25 +1,37 @@
 import { useState, useEffect } from 'react';
 import ProductoForm from './ProductoForm';
+import MovimientoMercancia from './MovimientoMercancia';
+import { useCodigoEscaneado } from '../lector/lector';
 import Miniatura from '../components/Miniatura';
 
 const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
 
+// El ajuste de un solo producto. Pasa por el mismo camino que la Entrada y la
+// Salida de mercancia (productos.moverLote), asi que la salida exige el mismo
+// motivo de la lista: si no, este boton seria la puerta trasera de esa regla.
 function AjusteStock({ producto, usuarioActual, onListo, onCancelar }) {
   const [cantidad, setCantidad] = useState('');
   const [sentido, setSentido] = useState('entrada');
+  const [motivos, setMotivos] = useState([]);
   const [motivo, setMotivo] = useState('');
+  const [nota, setNota] = useState('');
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => { window.api.productos.motivosSalida().then(setMotivos); }, []);
 
   async function aplicar() {
     const n = parseInt(cantidad, 10);
     if (!n || n <= 0) { setError('Escribe una cantidad mayor que cero.'); return; }
+    if (sentido === 'salida' && !motivo) { setError('Elige el motivo de la salida.'); return; }
+    if (sentido === 'salida' && motivo === 'Otro' && !nota.trim()) { setError('Con "Otro" hay que escribir qué pasó.'); return; }
 
     setGuardando(true);
-    const r = await window.api.productos.ajustarStock({
-      productoId: producto.id,
-      delta: sentido === 'entrada' ? n : -n,
-      motivo: motivo.trim() || null,
+    const r = await window.api.productos.moverLote({
+      tipo: sentido,
+      items: [{ productoId: producto.id, cantidad: n }],
+      motivo: sentido === 'salida' ? motivo : null,
+      nota: nota.trim() || null,
       usuarioId: usuarioActual.id,
     });
     setGuardando(false);
@@ -40,14 +52,23 @@ function AjusteStock({ producto, usuarioActual, onListo, onCancelar }) {
 
       <select value={sentido} onChange={e => { setSentido(e.target.value); setError(''); }}>
         <option value="entrada">Entrada (compra, devolución)</option>
-        <option value="salida">Salida (merma, consumo interno)</option>
+        <option value="salida">Salida sin venta (vencido, dañado, consumo)</option>
       </select>
       <input type="number" placeholder="Cantidad" value={cantidad}
              onChange={e => { setCantidad(e.target.value); setError(''); }}
              style={{ marginLeft: 8, width: 100 }} />
-      <br /><input placeholder="Motivo (recomendado)" value={motivo}
-                   onChange={e => setMotivo(e.target.value)}
-                   style={{ marginTop: 8, width: '100%' }} />
+
+      {sentido === 'salida' && (
+        <div style={{ marginTop: 8 }}>
+          <select value={motivo} onChange={e => { setMotivo(e.target.value); setError(''); }}>
+            <option value="">Motivo * (elige uno)</option>
+            {motivos.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+      )}
+      <input placeholder={sentido === 'salida' ? (motivo === 'Otro' ? 'Qué pasó *' : 'Detalle (opcional)') : 'Nota: proveedor, factura… (opcional)'}
+             value={nota} onChange={e => { setNota(e.target.value); setError(''); }}
+             style={{ marginTop: 8, width: '100%' }} />
 
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
@@ -68,6 +89,8 @@ export default function Inventario({ usuarioActual }) {
   const [porDesactivar, setPorDesactivar] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(false);
+  const [avisoLector, setAvisoLector] = useState(null);
+  const [codigoNuevo, setCodigoNuevo] = useState(null);
 
   async function cargar() {
     const lista = await window.api.productos.listarTodos();
@@ -77,10 +100,25 @@ export default function Inventario({ usuarioActual }) {
 
   useEffect(() => { cargar(); }, []);
 
+  // Escanear en la lista busca el producto. Si el codigo no existe se ofrece
+  // crearlo con el codigo ya puesto. Solo en la lista: la entrada, la salida y el
+  // formulario escuchan los suyos.
+  useCodigoEscaneado(async (codigo) => {
+    const p = await window.api.productos.buscarPorCodigo(codigo);
+    if (p) {
+      setBusqueda(codigo);
+      setSoloBajoMinimo(false);
+      setAvisoLector(null);
+    } else {
+      setAvisoLector({ codigo });
+    }
+  }, modo === 'lista');
+
   function volverALista() {
     setModo('lista');
     setProductoEditando(null);
     setAjustando(null);
+    setCodigoNuevo(null);
     cargar();
   }
 
@@ -107,9 +145,19 @@ export default function Inventario({ usuarioActual }) {
         <h1>Inventario</h1>
         <ProductoForm
           productoExistente={modo === 'editar' ? productoEditando : null}
+          codigoInicial={modo === 'nuevo' ? codigoNuevo : null}
           onGuardado={volverALista}
           onCancelar={volverALista}
         />
+      </div>
+    );
+  }
+
+  if (modo === 'entrada' || modo === 'salida') {
+    return (
+      <div>
+        <h1>Inventario</h1>
+        <MovimientoMercancia tipo={modo} usuarioActual={usuarioActual} onTerminar={volverALista} />
       </div>
     );
   }
@@ -118,7 +166,23 @@ export default function Inventario({ usuarioActual }) {
     <div>
       <h1>Inventario</h1>
 
-      <button onClick={() => setModo('nuevo')}>+ Nuevo producto</button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button onClick={() => { setAjustando(null); setModo('entrada'); }}>Entrada de mercancía</button>
+        <button onClick={() => { setAjustando(null); setModo('salida'); }}>Salida de mercancía</button>
+      </div>
+
+      {avisoLector && (
+        <div style={{ padding: '8px 12px', marginBottom: 12, maxWidth: 640, border: '1px solid var(--aviso)',
+                      background: 'var(--aviso-fondo)', borderRadius: 'var(--radio)' }}>
+          El código <b>{avisoLector.codigo}</b> no está registrado.
+          <button style={{ marginLeft: 8 }} onClick={() => { setCodigoNuevo(avisoLector.codigo); setAvisoLector(null); setModo('nuevo'); }}>
+            Crear producto con este código
+          </button>
+          <button style={{ marginLeft: 4 }} onClick={() => setAvisoLector(null)}>Cerrar</button>
+        </div>
+      )}
+
+      <button onClick={() => { setCodigoNuevo(null); setModo('nuevo'); }}>+ Nuevo producto</button>
       <input placeholder="Buscar por nombre, categoría o código"
              value={busqueda} onChange={e => setBusqueda(e.target.value)}
              style={{ marginLeft: 12, width: 300 }} />

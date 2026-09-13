@@ -27,6 +27,8 @@ function formatearFecha(iso) {
   });
 }
 
+const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
+
 const caja = (color) => ({
   padding: 16,
   border: '1px solid ' + (color || 'var(--borde)'),
@@ -53,6 +55,11 @@ export default function Desarrollador() {
 
   // Vaciado por zonas
   const [marcadas, setMarcadas] = useState([]);
+  // Borrar planes que nadie ha usado
+  const [planesDev, setPlanesDev] = useState([]);
+  const [porEliminarPlan, setPorEliminarPlan] = useState(null);
+  const [eliminandoPlan, setEliminandoPlan] = useState(false);
+  const [resultadoPlan, setResultadoPlan] = useState(null);
   const [confirmaVaciar, setConfirmaVaciar] = useState('');
   const [vaciando, setVaciando] = useState(false);
   const [resultadoVaciar, setResultadoVaciar] = useState(null);
@@ -80,16 +87,18 @@ export default function Desarrollador() {
   const [confirmaDemo, setConfirmaDemo] = useState(false);
 
   async function cargar() {
-    const [d, z, r, u] = await Promise.all([
+    const [d, z, r, u, pl] = await Promise.all([
       window.api.desarrollador.diagnostico(),
       window.api.desarrollador.zonas(),
       window.api.backup.listar(),
       window.api.desarrollador.usuarios(),
+      window.api.desarrollador.planes(),
     ]);
     if (d.ok) setDiag(d.datos);
     if (z.ok) setZonas(z.zonas);
     setRespaldos(r);
     if (u.ok) setUsuarios(u.usuarios);
+    if (pl.ok) setPlanesDev(pl.planes);
     await cargarAuditoria();
   }
 
@@ -136,6 +145,23 @@ export default function Desarrollador() {
     const r = await window.api.desarrollador.resetFabrica();
     setReseteando(false);
     setAviso({ tipo: 'error', texto: 'No se pudo resetear: ' + (r.motivo || 'desconocido') });
+  }
+
+  async function eliminarPlan() {
+    setEliminandoPlan(true);
+    setResultadoPlan(null);
+    // Con try por lo mismo que vaciar(): una excepcion del proceso principal no
+    // puede dejar el boton en "Eliminando..." para siempre.
+    let r;
+    try {
+      r = await window.api.desarrollador.eliminarPlan(porEliminarPlan.id);
+    } catch (e) {
+      r = { ok: false, motivo: 'error_inesperado', detalle: String(e && e.message ? e.message : e) };
+    }
+    setEliminandoPlan(false);
+    setResultadoPlan({ ...r, nombrePedido: porEliminarPlan.nombre });
+    setPorEliminarPlan(null);
+    await cargar();
   }
 
   async function eliminarRespaldo() {
@@ -360,6 +386,102 @@ export default function Desarrollador() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* --- Planes ------------------------------------------------------ */}
+      {/* Aparte de "Vaciar datos" porque no es una zona: los planes se borran de
+          uno en uno, y solo los que ninguna membresia usa. Un plan con
+          membresias se desactiva desde Planes, que es lo que conserva el
+          historial de los clientes. */}
+      <section style={{ marginBottom: 36 }}>
+        <h2>Planes</h2>
+        <p style={{ maxWidth: 760, color: 'var(--texto-suave)', marginTop: 0 }}>
+          Borra del catálogo los planes que <b>ninguna membresía usa</b>, tampoco una
+          anulada. Los que tienen membresías no se pueden borrar sin llevarse el
+          historial de esos clientes: para esos está <b>Desactivar</b> en la pantalla de
+          Planes. Antes de borrar se genera un respaldo automático.
+        </p>
+
+        {porEliminarPlan && (
+          <div style={{ ...caja('var(--error)'), marginBottom: 12 }}>
+            <p style={{ marginTop: 0 }}>
+              Borrar el plan <b>«{porEliminarPlan.nombre}»</b>
+              {porEliminarPlan.nombreConEspacios && <> (el que tiene espacios de más en el nombre)</>}
+              {' '}— {porEliminarPlan.tipo === 'ticketera' ? 'tiquetera' : 'periodo'}, {pesos(porEliminarPlan.precio)},
+              {porEliminarPlan.activo ? ' activo: hoy se ofrece al vender membresías.' : ' desactivado.'}
+              {' '}No lo usa ninguna membresía. No hay vuelta atrás salvo el respaldo.
+            </p>
+            <button onClick={eliminarPlan} disabled={eliminandoPlan}>
+              {eliminandoPlan ? 'Eliminando...' : 'Sí, eliminarlo'}
+            </button>
+            <button onClick={() => setPorEliminarPlan(null)} disabled={eliminandoPlan} style={{ marginLeft: 8 }}>Cancelar</button>
+          </div>
+        )}
+
+        {resultadoPlan && (
+          <div style={{ marginBottom: 12 }}>
+            {resultadoPlan.ok ? (
+              <>
+                <p style={{ color: 'var(--exito)', marginBottom: 4 }}>
+                  Plan «{resultadoPlan.plan.nombre}» eliminado.
+                </p>
+                <p style={{ marginTop: 0, color: resultadoPlan.respaldo.hecho ? 'var(--texto-suave)' : 'var(--aviso)', wordBreak: 'break-all' }}>
+                  {resultadoPlan.respaldo.hecho
+                    ? 'Respaldo previo: ' + resultadoPlan.respaldo.ruta
+                    : 'No se pudo generar el respaldo previo: ' + resultadoPlan.respaldo.motivo}
+                </p>
+              </>
+            ) : (
+              <p style={{ color: 'var(--error)' }}>
+                {resultadoPlan.motivo === 'plan_con_membresias'
+                  ? 'No se borró «' + resultadoPlan.nombre + '»: lo usan ' + resultadoPlan.membresias +
+                    ' membresías (puede que se haya vendido mientras tanto). Desactívalo desde Planes.'
+                  : resultadoPlan.motivo === 'plan_no_existe'
+                    ? 'Ese plan ya no existe.'
+                    : 'No se pudo eliminar: ' + (resultadoPlan.detalle || resultadoPlan.motivo)}
+              </p>
+            )}
+          </div>
+        )}
+
+        <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 900 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
+              <th>Plan</th><th>Tipo</th><th>Precio</th><th>Estado</th><th>Membresías</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {planesDev.map(pl => (
+              <tr key={pl.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: pl.activo ? 1 : 0.7 }}>
+                <td>
+                  «{pl.nombre}»
+                  {pl.nombreConEspacios && (
+                    <><br /><small style={{ color: 'var(--aviso)' }}>tiene espacios de más en el nombre</small></>
+                  )}
+                </td>
+                <td>{pl.tipo === 'ticketera' ? 'Tiquetera' : 'Periodo'}</td>
+                <td>{pesos(pl.precio)}</td>
+                <td>{pl.activo ? 'Activo' : 'Desactivado'}</td>
+                <td>
+                  {pl.membresias}
+                  {pl.anuladas > 0 && <small style={{ color: 'var(--texto-tenue)' }}> ({pl.anuladas} anuladas)</small>}
+                </td>
+                <td>
+                  {pl.membresias === 0 ? (
+                    <button onClick={() => { setPorEliminarPlan(pl); setResultadoPlan(null); setAviso(null); }}>
+                      Eliminar
+                    </button>
+                  ) : (
+                    <small style={{ color: 'var(--texto-tenue)' }}>En uso: no se puede borrar</small>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {planesDev.length === 0 && (
+              <tr><td colSpan={6} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>No hay planes.</td></tr>
+            )}
+          </tbody>
+        </table>
       </section>
 
       {/* --- Respaldos ---------------------------------------------------- */}

@@ -240,13 +240,14 @@ app.whenReady().then(async () => {
   try {
     await sembrar();
 
-    // Todo el IPC, el mismo que carga main.js. Si aqui falta un modulo, la
-    // pantalla que lo use se queda a medias y la captura enganaria.
-    for (const m of ['config', 'setup', 'auth', 'usuarios', 'clientes', 'planes', 'productos',
-                     'caja', 'ventas', 'dashboard', 'membresias', 'pausas', 'asistencias',
-                     'kiosco', 'desbloqueo', 'backup', 'huellas', 'imagenes', 'intercambio',
-                     'desarrollador', 'recordatorios']) {
-      require('../electron/ipc/' + m);
+    // Todo el IPC. Se lee la carpeta en vez de llevar la lista a mano: cuando
+    // era una lista, cada modulo nuevo se olvidaba aqui, y entonces la pantalla
+    // que lo usa se captura a medias -- sale la foto, parece que todo va bien, y
+    // el fallo esta en la consola donde nadie mira. Paso con 'portapapeles' y
+    // volvio a pasar con 'puerta'.
+    const dirIpc = path.join(__dirname, '..', 'electron', 'ipc');
+    for (const archivo of fs.readdirSync(dirIpc)) {
+      if (archivo.endsWith('.js')) require(path.join(dirIpc, archivo));
     }
 
     // El mismo permiso que da main.js: sin esto la camara del formulario de
@@ -385,6 +386,22 @@ app.whenReady().then(async () => {
     if (await clic('Editar', 'button')) await capturar('12-inventario-editar');
     await clic('Cancelar');
 
+    // Entrada y salida de mercancia, con un producto ya en la lista: vacia no se
+    // ve nada de lo que importa. Se agrega por nombre, que es el camino sin lector.
+    if (await clic('Entrada de mercancía', 'button')) {
+      await js(`window.__escribir('input[placeholder^="Agregar sin código"]', 'a')`);
+      await esperar(400);
+      await js(`(() => { const d = [...document.querySelectorAll('div')].find(x => x.textContent.includes('— hay') && x.children.length <= 1); if (d) d.click(); return !!d; })()`);
+      await esperar(500);
+      await capturar('12b-inventario-entrada');
+      await clic('Cancelar');
+      await clic('Sí, descartar');
+    }
+    if (await clic('Salida de mercancía', 'button')) {
+      await capturar('12c-inventario-salida');
+      await clic('Cancelar');
+    }
+
     await ir('Dashboards', '13-dashboards');
     await js('window.__scroll(1400)');
     await esperar(400);
@@ -393,6 +410,31 @@ app.whenReady().then(async () => {
     // ---- Sistema ---------------------------------------------------------
     await ir('Usuarios', '15-usuarios');
     await ir('Configuración', '16-configuracion');
+
+    // Configuracion es larguisima y el primer pantallazo solo alcanza a los
+    // datos del gimnasio. La seccion de la puerta queda muy por debajo, asi que
+    // se baja hasta ella: es la unica forma de mirar como quedo.
+    await js(`(() => {
+      const h = [...document.querySelectorAll('main h2')].find(x => x.textContent.indexOf('Puerta') === 0);
+      if (!h) return false;
+      h.scrollIntoView({ block: 'start' });
+      return true;
+    })()`);
+    await esperar(500);
+    await capturar('16b-configuracion-puerta');
+
+    // Marcar la casilla SIN guardar tiene que sacar el aviso amarillo. Es la
+    // trampa en la que se cayo la primera prueba de verdad: casilla marcada,
+    // Guardar sin pulsar, y el kiosco sin abrir nada.
+    await js(`(() => {
+      const c = [...document.querySelectorAll('main input[type=checkbox]')]
+        .find(x => (x.parentElement.textContent || '').indexOf('Abrir la puerta') >= 0);
+      if (!c) return false;
+      c.click();
+      return true;
+    })()`);
+    await esperar(400);
+    await capturar('16c-configuracion-puerta-sin-guardar');
 
     // ---- Panel de desarrollador ------------------------------------------
     // Se sale y se vuelve a entrar con Ctrl+Alt+D, que es el unico camino.
@@ -410,6 +452,16 @@ app.whenReady().then(async () => {
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true;`);
     await esperar(1400);
     await ir('Herramientas', '18-desarrollador');
+
+    // La seccion de planes queda debajo de "Vaciar datos": se baja hasta ella.
+    await js(`(() => {
+      const h = [...document.querySelectorAll('main h2')].find(x => x.textContent.trim() === 'Planes');
+      if (!h) return false;
+      h.scrollIntoView({ block: 'start' });
+      return true;
+    })()`);
+    await esperar(500);
+    await capturar('18b-desarrollador-planes');
 
     const errores = await js('window.__errores');
     if (errores && errores.length) {

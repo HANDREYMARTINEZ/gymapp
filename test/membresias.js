@@ -437,6 +437,54 @@ app.whenReady().then(async () => {
     check('y con el motivo cuando se escribio',
           historial.some(a => a.motivo === 'cortesia'));
 
+    // ------------------------------------ marcar dos veces no gasta tiquetes
+    //
+    // Fallo real, medido el 12-sep: el tiquete se descontaba ANTES de insertar la
+    // asistencia, y el "una por dia" lo decidia el indice unico al insertar. Cada
+    // marca repetida el mismo dia decia "ya registraste tu asistencia" y se
+    // llevaba un tiquete: 4 marcas, 4 tiquetes, 1 asistencia. Con la puerta,
+    // volver a marcar (salir al carro y volver) pasa a ser lo normal.
+    const planRep = planes.crear({ nombre: 'Tiquetera repetida', tipo: 'ticketera',
+                                   precio: 65000, num_tickets: 15, dias_vigencia: 30 });
+    const repite = clientes.crear({ documento: '5550001111', nombre: 'Repite Marca', telefono: '320' });
+    const mRep = membresias.vender({ clienteId: repite, planId: planRep, usuarioId });
+    membresias.registrarPago({ membresiaId: mRep, monto: 65000, metodo: 'Efectivo', usuarioId });
+    const usadosRep = () => db.prepare('SELECT tickets_usados u FROM membresias WHERE id = ?').get(mRep).u;
+    const asisRep = () => db.prepare('SELECT COUNT(*) n FROM asistencias WHERE cliente_id = ?').get(repite).n;
+
+    const primera = asistencias.registrar({ clienteId: repite, metodo: 'pin', registradoPor: null });
+    check('la primera marca del dia gasta un tiquete', primera.ok === true && usadosRep() === 1);
+    for (let i = 0; i < 3; i++) {
+      asistencias.registrar({ clienteId: repite, metodo: 'pin', registradoPor: null });
+    }
+    check('tres marcas mas el mismo dia NO gastan tiquetes',
+          usadosRep() === 1 && asisRep() === 1, 'usados=' + usadosRep() + ' asistencias=' + asisRep());
+    check('y contestan ya_registrado_hoy',
+          asistencias.registrar({ clienteId: repite, metodo: 'huella', registradoPor: null }).motivo === 'ya_registrado_hoy');
+
+    // La carrera: dos marcas del mismo cliente en el mismo instante (PIN y huella
+    // a la vez). La comprobacion previa no ve nada todavia, y la asistencia en
+    // conflicto aparece entre el UPDATE del tiquete y el INSERT. Se simula con un
+    // trigger que la mete justo ahi: si el tiquete y la asistencia no van en una
+    // sola transaccion, el tiquete queda gastado sin asistencia.
+    const carrera = clientes.crear({ documento: '5550002222', nombre: 'Marca Doble', telefono: '321' });
+    const mCar = membresias.vender({ clienteId: carrera, planId: planRep, usuarioId });
+    membresias.registrarPago({ membresiaId: mCar, monto: 65000, metodo: 'Efectivo', usuarioId });
+    db.exec(`CREATE TEMP TRIGGER simular_carrera AFTER UPDATE OF tickets_usados ON membresias
+             WHEN NEW.id = ${mCar}
+             BEGIN
+               INSERT INTO asistencias (cliente_id, fecha_hora, fecha, metodo, membresia_id, ticket_usado, registrado_por)
+               VALUES (${carrera}, '${hoy}T00:00:00.000Z', '${hoy}', 'huella', ${mCar}, 1, NULL);
+             END;`);
+    const enCarrera = asistencias.registrar({ clienteId: carrera, metodo: 'pin', registradoPor: null });
+    db.exec('DROP TRIGGER simular_carrera');
+    const usadosCar = db.prepare('SELECT tickets_usados u FROM membresias WHERE id = ?').get(mCar).u;
+    const asisCar = db.prepare('SELECT COUNT(*) n FROM asistencias WHERE cliente_id = ?').get(carrera).n;
+    check('en la carrera contesta ya_registrado_hoy', enCarrera.ok === false && enCarrera.motivo === 'ya_registrado_hoy',
+          JSON.stringify(enCarrera));
+    check('y deshace el tiquete: la transaccion no deja uno gastado sin asistencia',
+          usadosCar === 0 && asisCar === 0, 'usados=' + usadosCar + ' asistencias=' + asisCar);
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

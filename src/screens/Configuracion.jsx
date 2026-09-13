@@ -15,6 +15,19 @@ const FALLOS_IMPORT = {
   error_al_leer: 'No se pudo leer el archivo.',
 };
 
+// Cada motivo dice QUE hacer, no solo que fallo. Quien lee esto esta en el
+// mostrador con la puerta cerrada, no delante del codigo.
+const MOTIVOS_PUERTA = {
+  sin_modulo: 'La app no pudo cargar el controlador del puerto serie. Reinstala la aplicación.',
+  sin_puerto: 'Todavía no has elegido el puerto. Pulsa "Buscar la placa".',
+  sin_puertos: 'Windows no ve ningún puerto COM: revisa el cable USB y el driver FTDI.',
+  no_abre: 'El puerto existe pero no se deja abrir. Suele ser que otro programa lo tiene cogido (el IDE de Arduino, por ejemplo).',
+  no_responde: 'Hay una placa ahí, pero no contesta. Le falta grabarle el programa gymapp-puerta.',
+  ninguno_responde: 'Ninguno de los puertos contestó. Revisa que la placa esté enchufada y con el programa grabado.',
+  puerto_ocupado: 'El puerto lo tiene cogido otro programa — casi siempre el Monitor Serie del IDE de Arduino. Ciérralo y vuelve a intentarlo.',
+  escritura_fallida: 'Se perdió la conexión con la placa. Revisa el cable USB.',
+};
+
 function textoDeFallo(r) {
   return (FALLOS_IMPORT[r.motivo] || 'No se pudo importar: ' + r.motivo)
     + (r.detalle ? ' (' + r.detalle + ')' : '');
@@ -78,6 +91,16 @@ export default function Configuracion({ usuarioActual }) {
   // guardarla, porque los PIN no se pueden leer una vez guardados.
   const [regenerar, setRegenerar] = useState(false);
 
+  // Puerta: el Arduino que suelta el electroiman
+  const [puerta, setPuerta] = useState(null);
+  // Lo que hay de verdad en la base, aparte de lo que se esta editando. Sin
+  // esta copia no hay forma de avisar de que la casilla esta marcada pero sin
+  // guardar -- que es justo como Andrey la dejo la primera vez que la probo.
+  const [puertaGuardada, setPuertaGuardada] = useState(null);
+  const [puertos, setPuertos] = useState([]);
+  const [trabajandoPuerta, setTrabajandoPuerta] = useState('');
+  const [avisoPuerta, setAvisoPuerta] = useState(null);
+
   // Recordatorios de vencimiento por correo
   const [rec, setRec] = useState(null);
   const [recResumen, setRecResumen] = useState(null);
@@ -104,6 +127,78 @@ export default function Configuracion({ usuarioActual }) {
 
   async function cargarRespaldos() {
     setRespaldos(await window.api.backup.listar());
+  }
+
+  // Envuelto a proposito: la puerta es un accesorio y no puede tumbar la
+  // pantalla de Configuracion, que es desde donde se manejan los respaldos y los
+  // correos. Si esto falla, la seccion simplemente no aparece.
+  // conservarFormulario: refresca el estado (conectada, ultimo fallo) SIN pisar
+  // lo que se este editando. Antes "Buscar la placa" y "Abrir ahora" recargaban
+  // el formulario entero desde la base, y una casilla recien marcada se
+  // desmarcaba sola al pulsar cualquiera de los dos, sin avisar.
+  async function cargarPuerta(conservarFormulario) {
+    try {
+      const [e, ps] = await Promise.all([
+        window.api.puerta.estado(),
+        window.api.puerta.puertos(),
+      ]);
+      setPuertaGuardada(e);
+      setPuerta(p => (conservarFormulario && p)
+        ? { ...e, activa: p.activa, puerto: p.puerto, segundos: p.segundos }
+        : e);
+      setPuertos(ps);
+    } catch (e) { /* sin seccion de puerta */ }
+  }
+
+  const cambiarPuerta = (campo) => (valor) => {
+    setPuerta(p => ({ ...p, [campo]: valor }));
+    setAvisoPuerta(null);
+  };
+
+  async function guardarPuerta() {
+    setTrabajandoPuerta('guardar');
+    const r = await window.api.puerta.guardar({
+      activa: puerta.activa,
+      puerto: puerta.puerto,
+      segundos: puerta.segundos,
+    });
+    setTrabajandoPuerta('');
+    if (!r.ok) {
+      setAvisoPuerta({ tipo: 'error', texto: 'Los segundos tienen que estar entre 1 y 15.' });
+      return;
+    }
+    setAvisoPuerta({ tipo: 'ok', texto: 'Guardado.' });
+    // 'conectando' hasta que llegue el estado real: reconectar tarda ~3 s (la
+    // placa se resetea al abrir el puerto) y sin esto el recuadro gritaba "la
+    // placa no responde" justo despues de guardar bien.
+    setPuertaGuardada(g => ({ ...g, activa: puerta.activa, puerto: puerta.puerto,
+                              segundos: puerta.segundos, conectando: true, ultimoFallo: null }));
+    // Reconectar cuesta un par de segundos (la placa se resetea al abrir el
+    // puerto), asi que el estado se relee despues, ya asentado.
+    setTimeout(() => cargarPuerta(), 3000);
+  }
+
+  async function buscarPlaca() {
+    setTrabajandoPuerta('detectar');
+    setAvisoPuerta(null);
+    const r = await window.api.puerta.detectar();
+    await cargarPuerta(true);
+    if (r.ok) setPuerta(p => ({ ...p, puerto: r.puerto }));
+    setTrabajandoPuerta('');
+    setAvisoPuerta(r.ok
+      ? { tipo: 'ok', texto: 'Encontrada en ' + r.puerto + '.' }
+      : { tipo: 'error', texto: MOTIVOS_PUERTA[r.motivo] || ('No se encontró: ' + r.motivo) });
+  }
+
+  async function probarPuerta() {
+    setTrabajandoPuerta('probar');
+    setAvisoPuerta(null);
+    const r = await window.api.puerta.probar();
+    setTrabajandoPuerta('');
+    await cargarPuerta(true);
+    setAvisoPuerta(r.ok
+      ? { tipo: 'ok', texto: 'Pulso enviado: la puerta queda suelta ' + r.segundos + ' segundos.' }
+      : { tipo: 'error', texto: MOTIVOS_PUERTA[r.motivo] || ('No se pudo abrir: ' + r.motivo) });
   }
 
   async function cargarRecordatorios() {
@@ -143,7 +238,7 @@ export default function Configuracion({ usuarioActual }) {
   }
 
   useEffect(() => {
-    cargarDatos(); cargarRespaldos(); cargarRecordatorios(); cargarPines();
+    cargarDatos(); cargarRespaldos(); cargarRecordatorios(); cargarPines(); cargarPuerta();
   }, []);
 
   async function guardarDatos() {
@@ -742,6 +837,141 @@ export default function Configuracion({ usuarioActual }) {
               </p>
             )}
           </div>
+        )}
+      </section>
+
+      {/* La puerta va justo despues del PIN porque es la continuacion de lo
+          mismo: el kiosco decide si la persona puede entrar, y esto es lo que
+          hace que ese "si" abra algo. */}
+      <section style={{ marginBottom: 40 }}>
+        <h2>Puerta automática</h2>
+        <p style={{ maxWidth: 640, color: 'var(--texto-suave)' }}>
+          Cuando alguien marca en el kiosco y <b>sí puede entrenar</b>, la app le manda
+          la orden a una placa Arduino conectada por USB, que le corta la corriente al
+          electroimán unos segundos. Quien tenga la membresía vencida, pausada o con
+          saldo pendiente <b>no abre la puerta</b>: le sale el mensaje de siempre.
+        </p>
+
+        {/* El recuadro dice lo que hay GUARDADO, no lo que se esta editando: con
+            la casilla marcada sin guardar decia "Activada", y el kiosco seguia
+            sin abrir nada. Lo que se edita tiene su propio aviso, abajo. */}
+        {puertaGuardada && (
+          <div style={{ marginBottom: 12, padding: 14, maxWidth: 640,
+                        borderRadius: 'var(--radio)',
+                        border: '1px solid ' + (!puertaGuardada.activa ? 'var(--borde)'
+                                              : puertaGuardada.conectada ? 'var(--exito)'
+                                              : puertaGuardada.conectando ? 'var(--borde)' : 'var(--aviso)'),
+                        background: (puertaGuardada.activa && !puertaGuardada.conectada && !puertaGuardada.conectando) ? 'var(--aviso-fondo)' : 'transparent' }}>
+            {!puertaGuardada.activa ? (
+              <div style={{ color: 'var(--texto-suave)' }}>
+                <b>Desactivada.</b> El kiosco registra las asistencias igual que siempre,
+                pero no abre ninguna puerta.
+              </div>
+            ) : puertaGuardada.conectada ? (
+              <div>
+                <b style={{ color: 'var(--exito)' }}>Conectada</b> en {puertaGuardada.puerto}.
+                Cada entrada válida suelta la puerta {puertaGuardada.segundos} segundos.
+              </div>
+            ) : puertaGuardada.conectando ? (
+              <div style={{ color: 'var(--texto-suave)' }}>
+                <b>Conectando con la placa en {puertaGuardada.puerto}...</b>
+              </div>
+            ) : (
+              <div>
+                <b>Activada, pero la placa no responde.</b>
+                <div style={{ marginTop: 6 }}>
+                  {MOTIVOS_PUERTA[puertaGuardada.ultimoFallo] || 'Revisa que el Arduino esté enchufado.'}
+                </div>
+                {/* Esto es lo que de verdad tranquiliza a quien atiende: que el
+                    gimnasio no se para porque falle un cacharro. */}
+                <div style={{ marginTop: 6, color: 'var(--texto-suave)' }}>
+                  Mientras tanto las asistencias se siguen registrando; sólo hay que abrir a mano.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {puerta && (
+          <>
+            <div style={{ marginBottom: 10 }}>
+              <label>
+                <input type="checkbox" checked={!!puerta.activa}
+                       onChange={e => cambiarPuerta('activa')(e.target.checked)} />
+                {' '}Abrir la puerta cuando alguien marque una entrada válida
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+              <label style={{ display: 'inline-block', width: 100 }}>Puerto</label>
+              <select value={puerta.puerto || ''} style={{ width: 280 }}
+                      onChange={e => cambiarPuerta('puerto')(e.target.value)}>
+                <option value="">(sin elegir)</option>
+                {/* Si el puerto guardado ya no aparece en la lista -- tipico:
+                    alguien desenchufo el USB -- hay que seguir mostrandolo, o al
+                    guardar se perderia solo. */}
+                {puerta.puerto && !puertos.some(x => x.puerto === puerta.puerto) && (
+                  <option value={puerta.puerto}>{puerta.puerto} (ahora mismo no está)</option>
+                )}
+                {puertos.map(x => (
+                  <option key={x.puerto} value={x.puerto}>
+                    {x.puerto}{x.esFtdi ? '  — FTDI, probablemente esta' : ''}
+                    {x.descripcion ? '  (' + x.descripcion + ')' : ''}
+                  </option>
+                ))}
+              </select>
+              <button onClick={buscarPlaca} disabled={!!trabajandoPuerta}>
+                {trabajandoPuerta === 'detectar' ? 'Buscando...' : 'Buscar la placa'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+              <label style={{ display: 'inline-block', width: 100 }}>Segundos</label>
+              <input type="number" min={1} max={15} value={puerta.segundos}
+                     onChange={e => cambiarPuerta('segundos')(e.target.value)}
+                     style={{ width: 70, textAlign: 'center' }} />
+              <small style={{ color: 'var(--texto-tenue)' }}>
+                Lo que la puerta queda suelta. Entre 1 y 15.
+              </small>
+            </div>
+
+            {puertaGuardada && (
+              !!puerta.activa !== !!puertaGuardada.activa ||
+              (puerta.puerto || '') !== (puertaGuardada.puerto || '') ||
+              String(puerta.segundos) !== String(puertaGuardada.segundos)
+            ) && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', maxWidth: 640,
+                            borderRadius: 'var(--radio)', border: '1px solid var(--aviso)',
+                            background: 'var(--aviso-fondo)', color: 'var(--aviso)' }}>
+                {'\u26A0'} <b>Cambios sin guardar.</b> Hasta que pulses <b>Guardar</b>,
+                el kiosco sigue funcionando como antes.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={guardarPuerta} disabled={!!trabajandoPuerta}>
+                {trabajandoPuerta === 'guardar' ? 'Guardando...' : 'Guardar'}
+              </button>
+              {/* Abre de verdad aunque este desactivada: probarla ANTES de
+                  activarla es el orden sensato, no al reves. */}
+              <button onClick={probarPuerta} disabled={!!trabajandoPuerta}>
+                {trabajandoPuerta === 'probar' ? 'Abriendo...' : 'Abrir ahora (prueba)'}
+              </button>
+            </div>
+
+            {avisoPuerta && (
+              <p style={{ marginTop: 10, maxWidth: 640,
+                          color: avisoPuerta.tipo === 'ok' ? 'var(--exito)' : 'var(--error)' }}>
+                {avisoPuerta.texto}
+              </p>
+            )}
+
+            <p style={{ marginTop: 10, maxWidth: 640, fontSize: 12, color: 'var(--texto-tenue)' }}>
+              Para grabarle el programa a la placa desde el IDE de Arduino hay que
+              <b> cerrar GymApp antes</b>: mientras la app tiene el puerto abierto, el IDE
+              no puede usarlo.
+            </p>
+          </>
         )}
       </section>
 
