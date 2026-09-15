@@ -3,7 +3,7 @@ const { format, addDays, parseISO, differenceInCalendarDays } = require('date-fn
 const { calcularFechaInicioRenovacion, estadoMembresia } = require('../../services/membresias-logica');
 const { hayPausaActiva } = require('./pausas');
 const caja = require('./caja');
-const { esEfectivo } = require('../../services/medios-pago');
+const { esEfectivo, esMedioValido } = require('../../services/medios-pago');
 
 
 function hoyISO() {
@@ -144,6 +144,12 @@ function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
   if (!monto || monto <= 0) {
     return { ok: false, motivo: 'monto_invalido' };
   }
+  // Antes aceptaba cualquier texto. Con los fiados eso ya no vale: un "pago" con
+  // metodo 'Fiado' bajaria el saldo sin que entrara dinero. Fiar una membresia es
+  // fiar(), que no toca los pagos.
+  if (!esMedioValido(metodo)) {
+    return { ok: false, motivo: 'medio_pago_invalido' };
+  }
 
   const enEfectivo = esEfectivo(metodo);
   if (enEfectivo && !caja.sesionAbierta()) {
@@ -180,6 +186,40 @@ function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
   }
 
   return { ok: true };
+}
+
+// Fiar lo que falta de una membresia hasta una fecha. No mueve dinero ni crea
+// pagos: el saldo sigue siendo precio_pagado menos lo abonado, y se cobra despues
+// con registrarPago() como cualquier abono. Lo que cambia es el estado: hasta
+// fiadoHasta (incluido) el saldo no bloquea la entrada; desde el dia siguiente, si
+// sigue debiendo, vuelve a 'saldo_pendiente'. Decision de Andrey del 15-sep-2026.
+//
+// Se puede volver a llamar para mover la fecha ("paga el viernes" pasa a "paga el
+// lunes"): cada cambio queda en auditoria con la fecha anterior.
+function fiar({ membresiaId, fiadoHasta, usuarioId } = {}) {
+  const db = getDb();
+  const m = db.prepare(`SELECT * FROM membresias WHERE id = ?`).get(membresiaId);
+  if (!m) return { ok: false, motivo: 'no_existe' };
+  if (m.anulada) return { ok: false, motivo: 'esta_anulada' };
+
+  const saldo = calcularSaldoPendiente(membresiaId);
+  if (saldo <= 0) return { ok: false, motivo: 'sin_saldo' };
+
+  const fecha = normalizarFechaInicio(fiadoHasta);
+  if (!fecha) return { ok: false, motivo: 'fecha_invalida' };
+  // Fiar hasta ayer seria dejarla bloqueada con apariencia de fiada.
+  if (fecha < hoyISO()) return { ok: false, motivo: 'fecha_pasada' };
+
+  db.transaction(() => {
+    db.prepare(`UPDATE membresias SET fiado_hasta = ? WHERE id = ?`).run(fecha, membresiaId);
+    db.prepare(`
+      INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
+      VALUES (?, 'membresia_fiada', 'membresias', ?, ?, ?)
+    `).run(usuarioId || null, membresiaId, new Date().toISOString(),
+           JSON.stringify({ saldo, fiadoHasta: fecha, antes: m.fiado_hasta || null }));
+  })();
+
+  return { ok: true, saldo, fiadoHasta: fecha };
 }
 
 // "Eliminar membresia" en la interfaz es esto: anular. La fila se queda, el
@@ -354,4 +394,4 @@ function listarPagos(membresiaId) {
 }
 
 module.exports = {
-  ajustarTickets, estadoTickets, vender, anular, renovar, cambiarFechaInicio, registrarPago, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos };
+  ajustarTickets, estadoTickets, vender, anular, renovar, cambiarFechaInicio, registrarPago, fiar, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos };

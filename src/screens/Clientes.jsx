@@ -3,6 +3,7 @@ import ClienteForm from './ClienteForm';
 import ClienteFicha from './ClienteFicha';
 import VenderMembresiaForm from './VenderMembresiaForm';
 import RegistrarPagoForm from './RegistrarPagoForm';
+import CobrarDeuda from '../components/CobrarDeuda';
 
 // Estos colores son FONDO de etiqueta con letra clara encima, asi que todos
 // tienen que ser tonos oscuros. "Programada" usa el oro apagado y no el
@@ -68,6 +69,7 @@ export default function Clientes({ usuarioActual }) {
   const [motivoPausa, setMotivoPausa] = useState('');
   const [vendiendoA, setVendiendoA] = useState(null);
   const [pagandoMembresia, setPagandoMembresia] = useState(null);
+  const [cobrandoA, setCobrandoA] = useState(null);
   const [dadosDeBaja, setDadosDeBaja] = useState([]);
   const [verBajas, setVerBajas] = useState(false);
 
@@ -121,6 +123,7 @@ export default function Clientes({ usuarioActual }) {
     setMotivoPausa('');
     setVendiendoA(null);
     setPagandoMembresia(null);
+    setCobrandoA(null);
   }
 
   async function confirmarPausa(membresiaId) {
@@ -274,31 +277,62 @@ export default function Clientes({ usuarioActual }) {
 
         {/* ---------------- Derecha: los dos bloques de aviso ---------------- */}
         <div>
+          {/* Saldos de membresias y fiados de la tienda, en una sola lista: la
+              deuda de un cliente es una (decision del 15-sep-2026). "Cobrar"
+              cobra la cuenta entera o un abono; "Pagar / fiar" trabaja sobre una
+              membresia concreta, que es donde se pone la fecha de pago. */}
           <Tarjeta
-            titulo={`Con saldo pendiente (${lateral.conSaldo.length})`}
+            titulo={`Deben dinero (${lateral.conSaldo.length})`}
             vacio={lateral.conSaldo.length === 0 ? 'Nadie debe dinero.' : null}
           >
             {lateral.conSaldo.map(c => (
               <div key={c.id} style={{ borderTop: '1px solid var(--borde-suave)', paddingTop: 8, marginTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ cursor: 'pointer' }} onClick={() => abrirFicha(c.id)}>{c.nombre}</span>
-                  <b style={{ color: 'var(--aviso)', whiteSpace: 'nowrap' }}>{pesos(c.saldoPendiente)}</b>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => abrirFicha(c.id)}>
+                    {c.nombre}
+                    {c.vencido && <small style={{ color: 'var(--error)', marginLeft: 6 }}>vencido</small>}
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                    <b style={{ color: 'var(--aviso)', whiteSpace: 'nowrap' }}>{pesos(c.saldoPendiente)}</b>
+                    <button onClick={() => { const abrir = cobrandoA !== c.id; cerrarPaneles(); setCobrandoA(abrir ? c.id : null); }}
+                            style={{ fontSize: 12, padding: '3px 8px' }}>
+                      Cobrar
+                    </button>
+                  </div>
                 </div>
-                {c.membresiasConSaldo.map(m => (
+                {cobrandoA === c.id && (
+                  <CobrarDeuda clienteId={c.id} usuarioActual={usuarioActual} compacto
+                               onCobrado={() => { cerrarPaneles(); refrescar(); }}
+                               onCancelar={cerrarPaneles} />
+                )}
+                {cobrandoA !== c.id && c.membresiasConSaldo.map(m => (
                   <div key={m.id} style={{ marginTop: 4 }}>
                     <button onClick={() => { cerrarPaneles(); setPagandoMembresia(m.id); }}
                             style={{ fontSize: 12, padding: '3px 8px' }}>
-                      Pagar {m.planNombre} ({pesos(m.saldo)})
+                      Pagar / fiar {m.planNombre} ({pesos(m.saldo)})
                     </button>
+                    <small style={{ marginLeft: 6, color: m.vencido ? 'var(--error)' : 'var(--texto-tenue)' }}>
+                      {m.fiadoHasta ? (m.vencido ? 'debía pagar el ' : 'fiada hasta el ') + m.fiadoHasta : 'sin fiar'}
+                    </small>
                     {pagandoMembresia === m.id && (
                       <RegistrarPagoForm
                         membresiaId={m.id}
                         fInicioActual={m.fInicio}
+                        saldo={m.saldo}
+                        fiadoHastaActual={m.fiadoHasta}
                         usuarioActual={usuarioActual}
                         onGuardado={() => { cerrarPaneles(); refrescar(); }}
                         onCancelar={cerrarPaneles}
                       />
                     )}
+                  </div>
+                ))}
+                {cobrandoA !== c.id && c.ventasFiadas.map(v => (
+                  <div key={'v' + v.id} style={{ marginTop: 4, fontSize: 12, color: 'var(--texto-suave)' }}>
+                    Tienda, venta #{v.id}{v.detalle ? ' (' + v.detalle + ')' : ''}: <b>{pesos(v.saldo)}</b>
+                    <span style={{ marginLeft: 6, color: v.vencido ? 'var(--error)' : 'var(--texto-tenue)' }}>
+                      {v.fiadoHasta ? (v.vencido ? 'debía pagar el ' : 'paga el ') + v.fiadoHasta : ''}
+                    </span>
                   </div>
                 ))}
               </div>

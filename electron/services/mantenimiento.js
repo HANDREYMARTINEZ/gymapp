@@ -32,7 +32,7 @@ const ZONAS = {
   },
   ventas: {
     etiqueta: 'Ventas y caja',
-    detalle: 'ventas, sus líneas, sesiones de caja y movimientos',
+    detalle: 'ventas, sus líneas, cobros de fiados, sesiones de caja y movimientos',
     contar: () => contarDe('ventas'),
   },
 };
@@ -178,6 +178,8 @@ function vaciar(zonas) {
     }
 
     if (quiere('ventas')) {
+      // Antes que las ventas: los abonos de los fiados apuntan a ellas (migracion 012).
+      borrados.venta_abonos = borrar('DELETE FROM venta_abonos');
       borrados.venta_items = borrar('DELETE FROM venta_items');
       borrados.ventas = borrar('DELETE FROM ventas');
       borrados.caja_movimientos = borrar('DELETE FROM caja_movimientos');

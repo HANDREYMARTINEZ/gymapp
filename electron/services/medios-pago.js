@@ -26,4 +26,14 @@ function esMedioValido(metodo) {
   return MEDIOS.some(m => m.toLowerCase() === String(metodo || '').trim().toLowerCase());
 }
 
-module.exports = { MEDIOS, EFECTIVO, esEfectivo, esMedioValido };
+// 'Fiado' NO esta en MEDIOS a proposito. MEDIOS es la lista de formas de pagar de
+// verdad, y esMedioValido() es lo que acepta un abono: si Fiado estuviera dentro,
+// se podria "pagar" una deuda con otro fiado y el saldo bajaria sin que entrara
+// un peso. Solo la venta del POS lo admite, y lo pregunta con esFiado().
+const FIADO = 'Fiado';
+
+function esFiado(metodo) {
+  return String(metodo || '').trim().toLowerCase() === FIADO.toLowerCase();
+}
+
+module.exports = { MEDIOS, EFECTIVO, FIADO, esEfectivo, esMedioValido, esFiado };

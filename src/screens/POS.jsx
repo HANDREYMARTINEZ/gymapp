@@ -12,6 +12,9 @@ const MOTIVOS = {
   sin_items: 'Agrega al menos un producto.',
   medio_pago_invalido: 'Elige un medio de pago válido.',
   cantidad_invalida: 'Alguna cantidad no es válida.',
+  fiado_sin_cliente: 'Para fiar hay que elegir a qué cliente (activo) se le fía.',
+  fecha_invalida: 'La fecha de pago no es válida.',
+  fecha_pasada: 'La fecha de pago no puede ser anterior a hoy.',
 };
 
 function mensajeDe(r) {
@@ -35,6 +38,14 @@ export default function POS({ usuarioActual }) {
   // es donde se esta mirando, y no abajo en el carrito como el error de cobro.
   const [aviso, setAviso] = useState(null);
   const relojAviso = useRef(null);
+  // Fiar: a quien y hasta cuando. 'Fiado' no esta en la lista de medios de pago
+  // (no es una forma de pagar); se pide aparte y se anade al desplegable.
+  const [medioFiado, setMedioFiado] = useState(null);
+  const [buscaCliente, setBuscaCliente] = useState('');
+  const [candidatos, setCandidatos] = useState([]);
+  const [clienteFiado, setClienteFiado] = useState(null); // { id, nombre, debe }
+  const [fiadoHasta, setFiadoHasta] = useState('');
+  const esFiado = !!medioFiado && metodoPago === medioFiado;
 
   function avisar(tipo, texto) {
     if (relojAviso.current) clearTimeout(relojAviso.current);
@@ -55,7 +66,23 @@ export default function POS({ usuarioActual }) {
   useEffect(() => {
     cargar();
     window.api.ventas.mediosPago().then(setMedios);
+    window.api.ventas.medioFiado().then(setMedioFiado);
   }, []);
+
+  async function buscarClientes(texto) {
+    setBuscaCliente(texto);
+    setCandidatos(texto.trim().length >= 2 ? (await window.api.clientes.buscarConEstado(texto)).slice(0, 6) : []);
+  }
+
+  // Al elegirlo se muestra cuanto debe ya: no hay tope (decision del 15-sep-2026),
+  // asi que es el mostrador el que decide viendo la cifra.
+  async function elegirCliente(c) {
+    const cuenta = await window.api.fiados.cuenta(c.id);
+    setClienteFiado({ id: c.id, nombre: c.nombre, debe: cuenta.total, vencido: cuenta.vencido });
+    setBuscaCliente('');
+    setCandidatos([]);
+    setError('');
+  }
 
   const texto = busqueda.trim().toLowerCase();
   const visibles = texto
@@ -141,20 +168,27 @@ export default function POS({ usuarioActual }) {
 
   async function cobrar() {
     if (carrito.length === 0) { setError('Agrega al menos un producto.'); return; }
+    if (esFiado && !clienteFiado) { setError(MOTIVOS.fiado_sin_cliente); return; }
 
     setCobrando(true);
     const r = await window.api.ventas.registrar({
       items: carrito.map(l => ({ productoId: l.productoId, cantidad: l.cantidad })),
       metodoPago,
       usuarioId: usuarioActual.id,
+      clienteId: esFiado ? clienteFiado.id : undefined,
+      fiadoHasta: esFiado && fiadoHasta ? fiadoHasta : undefined,
     });
     setCobrando(false);
 
     if (!r.ok) { setError(mensajeDe(r)); return; }
 
-    setUltimaVenta({ ...r, metodoPago });
+    setUltimaVenta({ ...r, metodoPago, clienteNombre: esFiado ? clienteFiado.nombre : null });
     setCarrito([]);
     setError('');
+    // El siguiente ticket no tiene por que ser fiado ni del mismo cliente.
+    setClienteFiado(null);
+    setFiadoHasta('');
+    if (esFiado) setMetodoPago('Efectivo');
     cargar();
     if (buscador.current) buscador.current.focus();
   }
@@ -180,7 +214,9 @@ export default function POS({ usuarioActual }) {
 
       {ultimaVenta && (
         <p style={{ border: '1px solid var(--exito)', background: 'var(--exito-fondo)', padding: 10, maxWidth: 720 }}>
-          Venta <b>#{ultimaVenta.ventaId}</b> registrada por <b>{pesos(ultimaVenta.total)}</b> en {ultimaVenta.metodoPago}.
+          {ultimaVenta.clienteNombre
+            ? <>Venta <b>#{ultimaVenta.ventaId}</b> por <b>{pesos(ultimaVenta.total)}</b> fiada a <b>{ultimaVenta.clienteNombre}</b>.</>
+            : <>Venta <b>#{ultimaVenta.ventaId}</b> registrada por <b>{pesos(ultimaVenta.total)}</b> en {ultimaVenta.metodoPago}.</>}
         </p>
       )}
 
@@ -289,13 +325,50 @@ export default function POS({ usuarioActual }) {
           <select value={metodoPago} onChange={e => { setMetodoPago(e.target.value); setError(''); }}
                   style={{ width: '100%', padding: 4 }}>
             {medios.map(m => <option key={m}>{m}</option>)}
+            {medioFiado && <option value={medioFiado}>{medioFiado} (se paga después)</option>}
           </select>
+
+          {esFiado && (
+            <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--aviso)', borderRadius: 'var(--radio)' }}>
+              {clienteFiado ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                  <div>
+                    <b>{clienteFiado.nombre}</b>
+                    <div style={{ fontSize: 12, color: clienteFiado.debe > 0 ? 'var(--aviso)' : 'var(--texto-tenue)' }}>
+                      {clienteFiado.debe > 0
+                        ? 'Ya debe ' + pesos(clienteFiado.debe) + (clienteFiado.vencido ? ', con algo vencido' : '')
+                          + '. Con esta venta quedaría en ' + pesos(clienteFiado.debe + total) + '.'
+                        : 'No debe nada.'}
+                    </div>
+                  </div>
+                  <button onClick={() => setClienteFiado(null)} title="Cambiar de cliente">×</button>
+                </div>
+              ) : (
+                <>
+                  <input placeholder="¿A quién se le fía? Nombre o documento"
+                         value={buscaCliente} onChange={e => buscarClientes(e.target.value)}
+                         style={{ width: '100%' }} />
+                  {candidatos.map(c => (
+                    <button key={c.id} onClick={() => elegirCliente(c)}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 4 }}>
+                      {c.nombre} <small style={{ color: 'var(--texto-tenue)' }}>{c.documento}</small>
+                    </button>
+                  ))}
+                </>
+              )}
+              <label style={{ display: 'block', marginTop: 8, fontSize: 13 }}>
+                Paga el (opcional)<br />
+                <input type="date" value={fiadoHasta} max="2999-12-31"
+                       onChange={e => { setFiadoHasta(e.target.value); setError(''); }} />
+              </label>
+            </div>
+          )}
 
           {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
 
-          <button onClick={cobrar} disabled={cobrando || carrito.length === 0 || necesitaCaja}
+          <button onClick={cobrar} disabled={cobrando || carrito.length === 0 || necesitaCaja || (esFiado && !clienteFiado)}
                   style={{ marginTop: 10, width: '100%', padding: 10, fontSize: 16 }}>
-            {cobrando ? 'Cobrando...' : 'Cobrar ' + pesos(total)}
+            {cobrando ? 'Guardando...' : (esFiado ? 'Fiar ' + pesos(total) : 'Cobrar ' + pesos(total))}
           </button>
           {necesitaCaja && (
             <small style={{ color: 'var(--error)' }}>

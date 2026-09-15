@@ -143,6 +143,14 @@ ventas: {
   fueraDeCajaEntre: (desde, hasta) => ipcRenderer.invoke('ventas:fueraDeCajaEntre', desde, hasta),
   anular: (datos) => ipcRenderer.invoke('ventas:anular', datos),
   mediosPago: () => ipcRenderer.invoke('ventas:mediosPago'),
+  medioFiado: () => ipcRenderer.invoke('ventas:medioFiado'),
+  abonosDelDia: (fecha) => ipcRenderer.invoke('ventas:abonosDelDia', fecha),
+},
+
+// Lo que debe un cliente, junto (membresias con saldo y ventas fiadas), y cobrarlo.
+fiados: {
+  cuenta: (clienteId) => ipcRenderer.invoke('fiados:cuenta', clienteId),
+  cobrar: (datos) => ipcRenderer.invoke('fiados:cobrar', datos),
 },
 
 dashboard: {
@@ -157,6 +165,7 @@ membresias: {
   renovar: (datos) => ipcRenderer.invoke('membresias:renovar', datos),
   cambiarFechaInicio: (datos) => ipcRenderer.invoke('membresias:cambiarFechaInicio', datos),
   registrarPago: (datos) => ipcRenderer.invoke('membresias:registrarPago', datos),
+  fiar: (datos) => ipcRenderer.invoke('membresias:fiar', datos),
   listarPorCliente: (clienteId) => ipcRenderer.invoke('membresias:listarPorCliente', clienteId),
   pagosDelDia: (fecha) => ipcRenderer.invoke('membresias:pagosDelDia', fecha),
   listarPagos: (membresiaId) => ipcRenderer.invoke('membresias:listarPagos', membresiaId),

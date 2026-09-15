@@ -129,6 +129,17 @@ function DetalleVenta({ ventaId, usuarioActual, onAnulada }) {
         </p>
       )}
 
+      {/* Una venta fiada: lo que ya se cobro y lo que falta. Se cobra desde la
+          lista de clientes o la ficha, que es donde esta la cuenta entera. */}
+      {venta.abonos && (
+        <p style={{ fontSize: 12, color: venta.saldo > 0 ? 'var(--aviso)' : 'var(--exito)', margin: '6px 0 0' }}>
+          Fiado{venta.fiado_hasta ? ' hasta el ' + venta.fiado_hasta : ''}.{' '}
+          {venta.saldo > 0
+            ? 'Debe ' + pesos(venta.saldo) + (venta.abonos.length ? ' (ya abonó ' + pesos(venta.total - venta.saldo) + ')' : '') + '.'
+            : 'Ya está pagada.'}
+        </p>
+      )}
+
       {!confirmando ? (
         <button type="button" onClick={() => setConfirmando(true)} style={{ marginTop: 10 }}>
           Anular venta
@@ -396,6 +407,8 @@ export default function Caja({ usuarioActual }) {
   const [ingresos, setIngresos] = useState(null);
   const [ventasHoy, setVentasHoy] = useState([]);
   const [pagosHoy, setPagosHoy] = useState(null);
+  const [abonosHoy, setAbonosHoy] = useState(null);
+  const [medioFiado, setMedioFiado] = useState('Fiado');
   const [sesionAbiertaEnHistorial, setSesionAbiertaEnHistorial] = useState(null);
   const [ventaAbierta, setVentaAbierta] = useState(null);
   const [avisoVenta, setAvisoVenta] = useState('');
@@ -420,9 +433,10 @@ export default function Caja({ usuarioActual }) {
     setIngresos(await window.api.dashboard.ingresosDelDia(hoy));
     setVentasHoy(await window.api.ventas.listarDelDia(hoy));
     setPagosHoy(await window.api.membresias.pagosDelDia(hoy));
+    setAbonosHoy(await window.api.ventas.abonosDelDia(hoy));
   }
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(); window.api.ventas.medioFiado().then(setMedioFiado); }, []);
   // Lo de fuera va por su cuenta y no dentro de cargar(): asi se recarga solo
   // al mover el rango, y una sola vez al entrar. Un boton "Buscar" seria un
   // clic de mas para lo unico que hace esta caja.
@@ -431,7 +445,11 @@ export default function Caja({ usuarioActual }) {
   if (sesion === undefined) return <p>Cargando...</p>;
 
   const ventasVivas = ventasHoy.filter(v => !v.anulada);
-  const totalVentasHoy = ventasVivas.reduce((s, v) => s + v.total, 0);
+  const esFiada = (v) => String(v.metodo_pago).toLowerCase() === String(medioFiado).toLowerCase();
+  // Lo fiado se lista con las ventas (salio mercancia) pero no se suma: no entro
+  // dinero. Se suma el dia que se cobre, en "Cobros de fiados".
+  const totalVentasHoy = ventasVivas.filter(v => !esFiada(v)).reduce((s, v) => s + v.total, 0);
+  const totalFiadoHoy = ventasVivas.filter(esFiada).reduce((s, v) => s + v.total, 0);
 
   return (
     <div>
@@ -559,6 +577,12 @@ export default function Caja({ usuarioActual }) {
                 ))}
               </tbody>
             </table>
+            {ingresos.fiado && ingresos.fiado.total > 0 && (
+              <p style={{ color: 'var(--aviso)', fontSize: 13, marginBottom: 0 }}>
+                Hoy se fiaron {pesos(ingresos.fiado.total)} en {ingresos.fiado.ventas}{' '}
+                {ingresos.fiado.ventas === 1 ? 'venta' : 'ventas'}. No está sumado: entra el día que se cobre.
+              </p>
+            )}
           </Tarjeta>
 
           <div>
@@ -578,7 +602,9 @@ export default function Caja({ usuarioActual }) {
                       <tr onClick={() => setVentaAbierta(id => (id === v.id ? null : v.id))}
                           style={{ borderBottom: '1px solid var(--borde-suave)', cursor: 'pointer' }}>
                         <td style={{ width: 62 }}>{soloHora(v.fecha)}</td>
-                        <td>#{v.id}<br /><small style={{ color: 'var(--texto-tenue)' }}>{v.metodo_pago}</small></td>
+                        <td>#{v.id}<br /><small style={{ color: esFiada(v) ? 'var(--aviso)' : 'var(--texto-tenue)' }}>
+                          {v.metodo_pago}{esFiada(v) && v.cliente_nombre ? ' · ' + v.cliente_nombre : ''}
+                        </small></td>
                         <td style={{ textAlign: 'right' }}>{pesos(v.total)}</td>
                         <td style={{ width: 18, textAlign: 'right', color: 'var(--acento-claro)' }}>
                           {ventaAbierta === v.id ? '▾' : '▸'}
@@ -605,6 +631,12 @@ export default function Caja({ usuarioActual }) {
                 </tbody>
               </table>
 
+              {totalFiadoHoy > 0 && (
+                <p style={{ color: 'var(--aviso)', fontSize: 12, marginBottom: 0 }}>
+                  El total no incluye {pesos(totalFiadoHoy)} fiados.
+                </p>
+              )}
+
               {avisoVenta && (
                 <p style={{ color: 'var(--exito)', marginBottom: 0, marginTop: 10 }}>{avisoVenta}</p>
               )}
@@ -630,6 +662,30 @@ export default function Caja({ usuarioActual }) {
                 </tbody>
               </table>
             </Tarjeta>
+
+            {/* Lo que se cobro hoy de ventas fiadas (de hoy o de otros dias). Las
+                deudas de membresias se cobran como pagos y ya salen arriba. */}
+            {abonosHoy && abonosHoy.abonos.length > 0 && (
+              <Tarjeta
+                titulo={'Cobros de fiados de la tienda (' + abonosHoy.abonos.length + ')'}
+                extra={<b>{pesos(abonosHoy.total)}</b>}
+              >
+                <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 8 }}>
+                  <tbody>
+                    {abonosHoy.abonos.map(a => (
+                      <tr key={a.id} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
+                        <td style={{ width: 62 }}>{soloHora(a.fecha)}</td>
+                        <td>
+                          {a.cliente_nombre || 'Sin cliente'}
+                          <br /><small style={{ color: 'var(--texto-tenue)' }}>Venta #{a.venta_id} · {a.metodo}</small>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{pesos(a.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Tarjeta>
+            )}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ const { hayPausaActiva } = require('./pausas');
 const { calcularSaldoPendiente } = require('./membresias');
 const productos = require('./productos');
 const caja = require('./caja');
+const { FIADO } = require('../../services/medios-pago');
 
 // Todas las fechas que salen de aqui son LOCALES ('YYYY-MM-DD'). Las columnas
 // de timestamp se guardan en UTC con toISOString(), asi que se agrupan con
@@ -29,23 +30,57 @@ function ingresosDelDia(fechaLocal) {
   // Se suma linea a linea y no ventas.total porque un mismo ticket puede llevar
   // cosas del gimnasio y cosas que no lo son. Aqui solo cuenta lo del gimnasio:
   // meter lo de fuera inflaria los ingresos con dinero que no es del negocio.
-  const ventasPorMedio = db.prepare(`
+  //
+  // Lo fiado NO es ingreso el dia que se fia: no entro un peso. Entra el dia que se
+  // cobra, por el medio con que se cobre, y solo la parte del gimnasio (`dentro`
+  // del abono). Es el mismo criterio que ya seguian las membresias, que cuentan
+  // por pagos y no por venta.
+  const ventasDirectas = db.prepare(`
     SELECT v.metodo_pago AS medio,
            COUNT(DISTINCT v.id) AS n,
            COALESCE(SUM(i.cantidad * i.p_unitario), 0) AS monto
     FROM ventas v JOIN venta_items i ON i.venta_id = v.id
     WHERE date(v.fecha, 'localtime') = ? AND v.anulada = 0 AND i.fuera_de_caja = 0
+      AND LOWER(v.metodo_pago) <> LOWER(?)
     GROUP BY v.metodo_pago
     HAVING monto > 0
-    ORDER BY monto DESC
+  `).all(fecha, FIADO);
+
+  const cobrosDeFiados = db.prepare(`
+    SELECT a.metodo AS medio, COUNT(*) AS n, COALESCE(SUM(a.dentro), 0) AS monto,
+           COALESCE(SUM(a.monto - a.dentro), 0) AS fuera
+    FROM venta_abonos a JOIN ventas v ON v.id = a.venta_id
+    WHERE date(a.fecha, 'localtime') = ? AND a.anulada = 0 AND v.anulada = 0
+    GROUP BY a.metodo
   `).all(fecha);
 
-  const fueraDeCaja = db.prepare(`
+  const porMedio = new Map(ventasDirectas.map(f => [f.medio, { ...f }]));
+  for (const c of cobrosDeFiados) {
+    if (c.monto <= 0) continue;
+    const f = porMedio.get(c.medio) || { medio: c.medio, n: 0, monto: 0 };
+    f.n += c.n;
+    f.monto += c.monto;
+    porMedio.set(c.medio, f);
+  }
+  const ventasPorMedio = [...porMedio.values()].sort((a, b) => b.monto - a.monto);
+
+  const fueraDirecto = db.prepare(`
     SELECT COALESCE(SUM(i.cantidad * i.p_unitario), 0) AS monto,
            COALESCE(SUM(i.cantidad), 0) AS unidades
     FROM ventas v JOIN venta_items i ON i.venta_id = v.id
     WHERE date(v.fecha, 'localtime') = ? AND v.anulada = 0 AND i.fuera_de_caja = 1
-  `).get(fecha);
+      AND LOWER(v.metodo_pago) <> LOWER(?)
+  `).get(fecha, FIADO);
+  const fueraDeCaja = {
+    monto: fueraDirecto.monto + cobrosDeFiados.reduce((s, c) => s + c.fuera, 0),
+    unidades: fueraDirecto.unidades,
+  };
+
+  // Lo que se fio hoy, aparte: salio mercancia pero no entro dinero.
+  const fiadoHoy = db.prepare(`
+    SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS monto
+    FROM ventas WHERE date(fecha, 'localtime') = ? AND anulada = 0 AND LOWER(metodo_pago) = LOWER(?)
+  `).get(fecha, FIADO);
 
   const membresiasPorMedio = db.prepare(`
     SELECT metodo AS medio, COUNT(*) AS n, COALESCE(SUM(monto), 0) AS monto
@@ -66,6 +101,7 @@ function ingresosDelDia(fechaLocal) {
     // Aparte y sin sumar al total: es dinero que se movio en el mostrador pero
     // no es del gimnasio.
     fueraDeCaja: { total: fueraDeCaja.monto, unidades: fueraDeCaja.unidades },
+    fiado: { total: fiadoHoy.monto, ventas: fiadoHoy.n },
     total: totalVentas + totalMembresias,
   };
 }

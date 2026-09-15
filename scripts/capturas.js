@@ -210,6 +210,12 @@ async function sembrar() {
   // Un ticket mezclado: parte del gimnasio y parte no.
   ventas.registrar({ items: [{ productoId: barra, cantidad: 1 }, { productoId: crema, cantidad: 1 }], metodoPago: 'Efectivo', usuarioId: 1 });
 
+  // Fiados: la membresia con saldo queda fiada hasta dentro de 4 dias, y el mismo
+  // cliente se lleva un agua fiada. Asi "Deben dinero" y la ficha ensenan la
+  // cuenta con las dos cosas juntas.
+  membresias.fiar({ membresiaId: m2, fiadoHasta: format(addDays(new Date(), 4), 'yyyy-MM-dd'), usuarioId: 1 });
+  ventas.registrar({ items: [{ productoId: agua, cantidad: 1 }], metodoPago: 'Fiado', usuarioId: 1, clienteId: c2 });
+
   // Y una venta de fuera de caja de ayer, para que el rango de fechas tenga algo
   // que ensenar mas alla de hoy.
   const ayer = new Date(Date.now() - 24 * 3600 * 1000);
@@ -339,6 +345,23 @@ app.whenReady().then(async () => {
     await capturar('02-kiosco');
 
     await ir('Clientes', '03-clientes');
+    // Cobrar la cuenta de quien debe, desde la lista.
+    if (await js(`window.__clicEnTarjeta('Deben dinero', 'Cobrar', 'button')`)) {
+      await esperar(700);
+      await capturar('03b-clientes-cobrar');
+      await clic('Cancelar');
+    } else anotar('  NO se encontro el boton Cobrar en "Deben dinero"');
+    // La ficha de quien debe: la cuenta arriba y la membresia fiada.
+    if (await clic('Andrés Gómez', 'b')) {
+      await esperar(700);
+      await capturar('04d-ficha-debe');
+      if (await clic('Registrar pago / fiar')) {
+        await js(`(function () { const s = [...document.querySelectorAll('select')].find(x => [...x.options].some(o => o.value === 'Fiado')); if (!s) return false; return window.__escribir('select', 'Fiado', [...document.querySelectorAll('select')].indexOf(s)); })()`);
+        await esperar(500);
+        await capturar('04e-ficha-fiar');
+      }
+      await clic('Volver a la lista');
+    }
     // La ficha se abre desde la fila del cliente, que no es un boton.
     if (await clic('Carolina', 'div, tr, li, button')) await capturar('04-cliente-ficha');
     // "Volver a la lista" y no "Volver": en la ficha hay dos botones de volver y
@@ -359,7 +382,19 @@ app.whenReady().then(async () => {
     }
 
     await ir('Vender', '05-vender');
-    if (await clic('Agua 600ml', 'button, li, div[role=button]')) await capturar('06-vender-carrito');
+    if (await clic('Agua 600ml', 'button, li, div[role=button]')) {
+      await capturar('06-vender-carrito');
+      // Fiar el ticket: elegir 'Fiado', buscar al cliente y elegirlo.
+      const conFiado = await js(`(function () { const s = [...document.querySelectorAll('select')].find(x => [...x.options].some(o => o.value === 'Fiado')); if (!s) return false; return window.__escribir('select', 'Fiado', [...document.querySelectorAll('select')].indexOf(s)); })()`);
+      if (conFiado) {
+        await esperar(400);
+        await js(`window.__escribir('input[placeholder^="¿A quién"]', 'Andr')`);
+        await esperar(900);
+        await clic('Andrés Gómez', 'button');
+        await esperar(700);
+        await capturar('06b-vender-fiado');
+      } else anotar('  NO aparece la opcion Fiado en Vender');
+    }
 
     await ir('Caja', '07-caja');
     // Una venta desplegada: lo que llevaba y el boton de anular.

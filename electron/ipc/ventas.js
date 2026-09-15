@@ -1,6 +1,6 @@
 const { ipcMain } = require('electron');
 const repo = require('../db/repos/ventas');
-const { MEDIOS } = require('../services/medios-pago');
+const { MEDIOS, FIADO } = require('../services/medios-pago');
 
 ipcMain.handle('ventas:registrar', (_evt, datos) => repo.registrar(datos));
 ipcMain.handle('ventas:obtener', (_evt, ventaId) => repo.obtener(ventaId));
@@ -10,4 +10,7 @@ ipcMain.handle('ventas:fueraDeCajaDelDia', (_evt, fecha) => repo.fueraDeCajaDelD
 ipcMain.handle('ventas:fueraDeCajaEntre', (_evt, desde, hasta) => repo.fueraDeCajaEntre(desde, hasta));
 ipcMain.handle('ventas:anular', (_evt, datos) => repo.anular(datos));
 ipcMain.handle('ventas:mediosPago', () => MEDIOS);
+// Aparte de MEDIOS a proposito: fiar no es pagar. Ver services/medios-pago.js.
+ipcMain.handle('ventas:medioFiado', () => FIADO);
+ipcMain.handle('ventas:abonosDelDia', (_evt, fecha) => repo.abonosDelDia(fecha));
 module.exports = {};

@@ -4,10 +4,18 @@ function diasEntre(fechaHoy, fechaFin) {
   return differenceInCalendarDays(parseISO(fechaFin), parseISO(fechaHoy));
 }
 
+function estaFiadaAlDia(m, hoy) {
+  return !!m.fiado_hasta && hoy <= m.fiado_hasta;
+}
+
 function estadoMembresia(m, hoy, pausaActiva, saldoPendiente, diasAviso = 5) {
   if (m.anulada) return 'anulada';
   if (pausaActiva) return 'pausada';
-  if (saldoPendiente > 0) return 'saldo_pendiente';
+  // Una membresia fiada no bloquea mientras no pase la fecha que dio el cliente
+  // para pagar (el mismo dia incluido). Sigue debiendo -- el saldo se ve en la
+  // ficha y en la lista de quienes deben --, pero entra. Pasada la fecha sin
+  // pagar, vuelve a ser un saldo pendiente como cualquier otro.
+  if (saldoPendiente > 0 && !estaFiadaAlDia(m, hoy)) return 'saldo_pendiente';
 
   // Desde que la fecha de inicio se elige a mano se pueden vender membresias que
   // empiezan mas adelante. Sin esto, una que arranca el mes que viene contaria
@@ -95,7 +103,7 @@ function elegirTicketeraParaConsumo(ticketerasActivas) {
 }
 
 module.exports = {
-  diasEntre, estadoMembresia, calcularFechaInicioRenovacion, elegirTicketeraParaConsumo,
+  diasEntre, estadoMembresia, estaFiadaAlDia, calcularFechaInicioRenovacion, elegirTicketeraParaConsumo,
   elegirMembresiaGobernante, puedeEntrenar, ESTADOS_QUE_DEJAN_ENTRAR,
   puedeReingresar, ESTADOS_QUE_DEJAN_VOLVER,
 };

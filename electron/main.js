@@ -24,6 +24,7 @@ require('./ipc/desarrollador');
 require('./ipc/portapapeles');
 require('./ipc/recordatorios');
 require('./ipc/puerta');
+require('./ipc/fiados');
 
 
 

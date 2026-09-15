@@ -4,6 +4,7 @@ import RenovarMembresiaForm from './RenovarMembresiaForm';
 import EliminarMembresiaForm from './EliminarMembresiaForm';
 import RegistrarPagoForm from './RegistrarPagoForm';
 import BotonVolver from '../components/BotonVolver';
+import CobrarDeuda from '../components/CobrarDeuda';
 
 // Fondos de etiqueta con letra clara encima: todos oscuros. "Programada" va en
 // oro apagado, no en el amarillo de la marca, que dejaria el texto ilegible.
@@ -55,6 +56,9 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   const [deltaTickets, setDeltaTickets] = useState('');
   const [motivoTickets, setMotivoTickets] = useState('');
   const [avisoTickets, setAvisoTickets] = useState(null);
+  // Lo que debe en total (membresias con saldo y fiados de la tienda).
+  const [cuenta, setCuenta] = useState(null);
+  const [cobrando, setCobrando] = useState(false);
 
   // Las que siguen contando para algo. Es el mismo criterio que usa el backend
   // al anotar la baja en auditoria, y lo que se le avisa antes de confirmarla.
@@ -101,6 +105,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setCliente(c);
     const m = await window.api.membresias.listarPorCliente(clienteId);
     setMembresias(m);
+    setCuenta(await window.api.fiados.cuenta(clienteId));
     setPagosPorMembresia({});
     setPausasPorMembresia({});
   }
@@ -118,6 +123,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setMotivoTickets('');
     setAvisoTickets(null);
     setMostrarBaja(false);
+    setCobrando(false);
   }
 
   async function expandir(membresiaId) {
@@ -184,14 +190,21 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
         )}
 
         {m.saldoPendiente > 0 && (
-          <p style={{ color: 'var(--aviso)', marginBottom: 0 }}>Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}</p>
+          <p style={{ color: 'var(--aviso)', marginBottom: 0 }}>
+            Saldo pendiente: ${m.saldoPendiente.toLocaleString('es-CO')}
+            {m.anulada === 0 && (m.fiado_hasta
+              ? (m.estado === 'saldo_pendiente'
+                  ? <span style={{ color: 'var(--error)' }}> · fiada hasta el {m.fiado_hasta}: ya pasó la fecha, no puede entrar</span>
+                  : <span> · fiada hasta el {m.fiado_hasta}: puede entrar hasta ese día</span>)
+              : <span> · sin fiar: no puede entrar hasta que pague o se le fíe</span>)}
+          </p>
         )}
 
         {m.anulada === 0 && (
           <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {m.saldoPendiente > 0 && (
               <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarPagoId !== m.id; cerrarPaneles(); setMostrarPagoId(abrir ? m.id : null); }}>
-                Registrar pago
+                Registrar pago / fiar
               </button>
             )}
             {m.estado === 'pausada'
@@ -261,6 +274,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
 
         {mostrarPagoId === m.id && (
           <RegistrarPagoForm membresiaId={m.id} fInicioActual={m.f_inicio} usuarioActual={usuarioActual}
+                             saldo={m.saldoPendiente} fiadoHastaActual={m.fiado_hasta}
                              onGuardado={despuesDeCambio} onCancelar={cerrarPaneles} />
         )}
 
@@ -380,6 +394,29 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
             <button onClick={confirmarBaja}>Sí, dar de baja</button>
             <button onClick={() => { setMostrarBaja(false); setMotivoBaja(''); }}>Cancelar</button>
           </div>
+        </div>
+      )}
+
+      {/* La cuenta del cliente: todo lo que debe junto, membresias y tienda. */}
+      {cuenta && cuenta.total > 0 && (
+        <div style={{ margin: '16px 0 0', padding: '10px 14px', maxWidth: 620,
+                      border: '1px solid ' + (cuenta.vencido ? 'var(--error)' : 'var(--aviso)'),
+                      background: 'var(--aviso-fondo)', borderRadius: 'var(--radio)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <div>
+              <b>Debe ${cuenta.total.toLocaleString('es-CO')}</b>
+              <span style={{ color: 'var(--texto-suave)', fontSize: 13 }}>
+                {' '}en {cuenta.items.length} {cuenta.items.length === 1 ? 'cuenta' : 'cuentas'}
+                {cuenta.vencido ? ' · hay algo vencido' : ''}
+              </span>
+            </div>
+            {!cobrando && <button onClick={() => { cerrarPaneles(); setCobrando(true); }}>Cobrar</button>}
+          </div>
+          {cobrando && (
+            <CobrarDeuda clienteId={clienteId} usuarioActual={usuarioActual}
+                         onCobrado={() => { setCobrando(false); cargar(); }}
+                         onCancelar={() => setCobrando(false)} />
+          )}
         </div>
       )}
 

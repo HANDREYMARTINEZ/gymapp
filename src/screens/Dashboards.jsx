@@ -171,6 +171,11 @@ export default function Dashboards() {
               + {pesos(ingresos.fueraDeCaja.total)} fuera de caja, aparte
             </div>
           )}
+          {ingresos.fiado && ingresos.fiado.total > 0 && (
+            <div style={{ color: 'var(--aviso)', fontSize: 13, marginTop: 4 }}>
+              {pesos(ingresos.fiado.total)} fiados hoy, sin sumar hasta que se cobren
+            </div>
+          )}
         </Tarjeta>
 
         <Tarjeta titulo="Membresías del día">

@@ -1,6 +1,7 @@
 const { format } = require('date-fns');
 const { getDb } = require('../connection');
-const { estadoMembresia, elegirMembresiaGobernante, puedeEntrenar } = require('../../services/membresias-logica');
+const { estadoMembresia, elegirMembresiaGobernante, puedeEntrenar, estaFiadaAlDia } = require('../../services/membresias-logica');
+const ventasRepo = require('./ventas');
 
 // Los tres bloques de la pantalla de Clientes: la lista buscable de la izquierda,
 // los que deben dinero y los que hoy no pueden entrenar.
@@ -100,18 +101,40 @@ function panelLateral() {
     .all();
 
   const resumidos = clientes.map(c => resumirCliente(c, estados.get(c.id)));
+  const hoy = hoyLocal();
+
+  // Las ventas fiadas de la tienda van a la misma lista: la deuda de un cliente es
+  // una sola (decision del 15-sep-2026). Se traen todas de una vez, como el resto.
+  const fiadas = new Map();
+  for (const v of ventasRepo.fiadasPendientes()) {
+    if (!fiadas.has(v.cliente_id)) fiadas.set(v.cliente_id, []);
+    fiadas.get(v.cliente_id).push({
+      id: v.id, detalle: v.detalle, saldo: v.saldo, fecha: v.fecha,
+      fiadoHasta: v.fiado_hasta || null,
+      vencido: !!v.fiado_hasta && hoy > v.fiado_hasta,
+    });
+  }
 
   const conSaldo = resumidos
-    .filter(c => c.saldoPendiente > 0)
-    .sort((a, b) => b.saldoPendiente - a.saldoPendiente)
-    .map(c => ({
-      ...c,
+    .map(c => {
+      const ventasFiadas = fiadas.get(c.id) || [];
       // La membresia concreta que hay que pagar, para que el boton de la tarjeta
       // sepa a cual abonar sin que el mostrador tenga que entrar a la ficha.
-      membresiasConSaldo: (estados.get(c.id) || [])
+      const membresiasConSaldo = (estados.get(c.id) || [])
         .filter(m => !m.anulada && m.saldoPendiente > 0)
-        .map(m => ({ id: m.id, planNombre: m.plan_nombre, saldo: m.saldoPendiente, fInicio: m.f_inicio })),
-    }));
+        .map(m => ({ id: m.id, planNombre: m.plan_nombre, saldo: m.saldoPendiente, fInicio: m.f_inicio,
+                     fiadoHasta: m.fiado_hasta || null, vencido: !estaFiadaAlDia(m, hoy) }));
+      const deVentas = ventasFiadas.reduce((s, v) => s + v.saldo, 0);
+      return {
+        ...c,
+        saldoPendiente: c.saldoPendiente + deVentas,
+        membresiasConSaldo,
+        ventasFiadas,
+        vencido: membresiasConSaldo.some(m => m.vencido) || ventasFiadas.some(v => v.vencido),
+      };
+    })
+    .filter(c => c.saldoPendiente > 0)
+    .sort((a, b) => b.saldoPendiente - a.saldoPendiente);
 
   // "Vencidos o sin tickets", literal: los que ya tuvieron algo y se les acabo.
   // Quien no ha comprado nunca no entra aqui, o la lista serian todos los

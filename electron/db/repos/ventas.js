@@ -1,7 +1,19 @@
 const { getDb } = require('../connection');
 const productos = require('./productos');
 const caja = require('./caja');
-const { esEfectivo, esMedioValido } = require('../../services/medios-pago');
+const { format, parseISO } = require('date-fns');
+const { esEfectivo, esMedioValido, esFiado, FIADO } = require('../../services/medios-pago');
+
+function hoyLocal() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+// 'YYYY-MM-DD' que exista de verdad (no 2026-02-31), o null.
+function fechaValida(f) {
+  if (typeof f !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return null;
+  const d = parseISO(f);
+  return !Number.isNaN(d.getTime()) && format(d, 'yyyy-MM-dd') === f ? f : null;
+}
 
 // Una venta puede llevar cosas del gimnasio y cosas que no lo son, en el mismo
 // ticket. Por eso no hay un solo total sino dos: lo que entra al negocio y al
@@ -21,11 +33,12 @@ class VentaRechazada extends Error {
   }
 }
 
-function registrar({ items, metodoPago, usuarioId, clienteId }) {
+function registrar({ items, metodoPago, usuarioId, clienteId, fiadoHasta }) {
   if (!Array.isArray(items) || items.length === 0) {
     return { ok: false, motivo: 'sin_items' };
   }
-  if (!esMedioValido(metodoPago)) {
+  const fiado = esFiado(metodoPago);
+  if (!fiado && !esMedioValido(metodoPago)) {
     return { ok: false, motivo: 'medio_pago_invalido' };
   }
   for (const item of items) {
@@ -34,8 +47,24 @@ function registrar({ items, metodoPago, usuarioId, clienteId }) {
     }
   }
 
-  const enEfectivo = esEfectivo(metodoPago);
   const db = getDb();
+
+  // Un fiado sin cliente es una deuda que no se le puede cobrar a nadie. Tampoco a
+  // uno dado de baja: no sale en las busquedas ni en la lista de quienes deben, y
+  // la deuda quedaria escondida.
+  let fechaFiado = null;
+  if (fiado) {
+    const cliente = clienteId ? db.prepare(`SELECT id, activo FROM clientes WHERE id = ?`).get(clienteId) : null;
+    if (!cliente || !cliente.activo) return { ok: false, motivo: 'fiado_sin_cliente' };
+    if (fiadoHasta) {
+      fechaFiado = fechaValida(fiadoHasta);
+      if (!fechaFiado) return { ok: false, motivo: 'fecha_invalida' };
+      if (fechaFiado < hoyLocal()) return { ok: false, motivo: 'fecha_pasada' };
+    }
+  }
+
+  // Lo fiado no entra al cajon hoy: entra cuando se cobre (abonar).
+  const enEfectivo = esEfectivo(metodoPago);
 
   const tx = db.transaction(() => {
     const fecha = new Date().toISOString();
@@ -93,9 +122,9 @@ function registrar({ items, metodoPago, usuarioId, clienteId }) {
     }
 
     const info = db.prepare(`
-      INSERT INTO ventas (fecha, total, metodo_pago, usuario_id, cliente_id, anulada)
-      VALUES (?, ?, ?, ?, ?, 0)
-    `).run(fecha, total, metodoPago, usuarioId, clienteId || null);
+      INSERT INTO ventas (fecha, total, metodo_pago, usuario_id, cliente_id, anulada, fiado_hasta)
+      VALUES (?, ?, ?, ?, ?, 0, ?)
+    `).run(fecha, total, fiado ? FIADO : metodoPago, usuarioId, clienteId || null, fechaFiado);
     const ventaId = info.lastInsertRowid;
 
     const insertarItem = db.prepare(`
@@ -148,6 +177,133 @@ function repartoDe(ventaId) {
   return fila || { dentro: 0, fuera: 0 };
 }
 
+// ------------------------------------------------------------------ fiados
+//
+// Lo que falta por cobrar de una venta fiada: el total menos los abonos vivos.
+// Para una venta que no es fiada, o anulada, no hay nada que cobrar.
+function saldoFiado(ventaId) {
+  const db = getDb();
+  const venta = db.prepare(`SELECT * FROM ventas WHERE id = ?`).get(ventaId);
+  if (!venta || venta.anulada || !esFiado(venta.metodo_pago)) return null;
+  const abonos = db.prepare(`
+    SELECT COALESCE(SUM(monto), 0) AS monto, COALESCE(SUM(dentro), 0) AS dentro
+    FROM venta_abonos WHERE venta_id = ? AND anulada = 0
+  `).get(ventaId);
+  return {
+    venta,
+    abonado: abonos.monto,
+    abonadoDentro: abonos.dentro,
+    saldo: venta.total - abonos.monto,
+  };
+}
+
+// Cobrar (todo o parte de) una venta fiada. El abono paga primero la parte del
+// gimnasio y despues la de fuera de caja: asi, si el ticket mezcla las dos, lo
+// que entra al cajon nunca pasa de lo que es del gimnasio, y las cuentas salen
+// en pesos enteros sin repartir proporciones.
+//
+// Pensada para llamarse sola o dentro de otra transaccion (cobrar la cuenta
+// entera de un cliente): lanza AbonoRechazado en vez de devolver, para que la
+// transaccion de fuera se tumbe entera.
+class AbonoRechazado extends Error {
+  constructor(motivo, extra) {
+    super('abono_rechazado:' + motivo);
+    this.motivo = motivo;
+    this.extra = extra || {};
+  }
+}
+
+function abonarSinAtrapar({ ventaId, monto, metodo, usuarioId, nota }) {
+  const n = parseInt(monto, 10);
+  if (!Number.isInteger(n) || n <= 0) throw new AbonoRechazado('monto_invalido');
+  if (!esMedioValido(metodo)) throw new AbonoRechazado('medio_pago_invalido');
+
+  const estado = saldoFiado(ventaId);
+  if (!estado) throw new AbonoRechazado('no_es_fiado');
+  if (n > estado.saldo) throw new AbonoRechazado('mas_que_el_saldo', { saldo: estado.saldo });
+
+  const db = getDb();
+  const reparto = repartoDe(ventaId);
+  const dentroPendiente = Math.max(0, reparto.dentro - estado.abonadoDentro);
+  const dentro = Math.min(n, dentroPendiente);
+  const alCajon = esEfectivo(metodo) && dentro > 0;
+
+  if (alCajon && !caja.sesionAbierta()) throw new AbonoRechazado('sin_caja_abierta');
+
+  const info = db.prepare(`
+    INSERT INTO venta_abonos (venta_id, monto, dentro, metodo, fecha, usuario_id, nota, anulada)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+  `).run(ventaId, n, dentro, metodo, new Date().toISOString(), usuarioId || null, nota || null);
+
+  if (alCajon) {
+    const mov = caja.registrarMovimiento({
+      tipo: 'ingreso',
+      concepto: 'Cobro de fiado, venta #' + ventaId,
+      monto: dentro,
+      usuarioId,
+      origen: 'venta',
+    });
+    if (!mov.ok) throw new AbonoRechazado(mov.motivo);
+  }
+
+  return { ok: true, abonoId: info.lastInsertRowid, monto: n, dentro, alCajon: alCajon ? dentro : 0,
+           saldo: estado.saldo - n };
+}
+
+function abonar(datos) {
+  try {
+    return getDb().transaction(() => abonarSinAtrapar(datos || {}))();
+  } catch (e) {
+    if (e instanceof AbonoRechazado) return { ok: false, motivo: e.motivo, ...e.extra };
+    throw e;
+  }
+}
+
+// Las ventas fiadas que aun se deben, de un cliente o de todos.
+function fiadasPendientes(clienteId) {
+  const db = getDb();
+  const filas = db.prepare(`
+    SELECT v.*,
+           COALESCE((SELECT SUM(a.monto) FROM venta_abonos a WHERE a.venta_id = v.id AND a.anulada = 0), 0) AS abonado
+    FROM ventas v
+    WHERE v.anulada = 0 AND LOWER(v.metodo_pago) = LOWER(?)
+      ${clienteId ? 'AND v.cliente_id = ?' : 'AND v.cliente_id IS NOT NULL'}
+    ORDER BY v.fecha, v.id
+  `).all(...(clienteId ? [FIADO, clienteId] : [FIADO]));
+
+  const lineas = db.prepare(`SELECT producto_nombre, cantidad FROM venta_items WHERE venta_id = ? ORDER BY id`);
+  return filas
+    .map(v => ({ ...v, saldo: v.total - v.abonado }))
+    .filter(v => v.saldo > 0)
+    .map(v => ({
+      ...v,
+      detalle: lineas.all(v.id).map(l => l.cantidad + ' ' + l.producto_nombre).join(', '),
+    }));
+}
+
+function listarAbonos(ventaId) {
+  return getDb().prepare(`
+    SELECT a.*, u.nombre AS usuario_nombre FROM venta_abonos a
+    LEFT JOIN usuarios u ON u.id = a.usuario_id
+    WHERE a.venta_id = ? ORDER BY a.fecha, a.id
+  `).all(ventaId);
+}
+
+// Los cobros de fiados de un dia, para la Caja: es dinero que entra hoy aunque la
+// venta sea de otro dia.
+function abonosDelDia(fechaLocal) {
+  const filas = getDb().prepare(`
+    SELECT a.*, v.cliente_id, c.nombre AS cliente_nombre, u.nombre AS usuario_nombre
+    FROM venta_abonos a
+    JOIN ventas v ON v.id = a.venta_id
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    LEFT JOIN usuarios u ON u.id = a.usuario_id
+    WHERE date(a.fecha, 'localtime') = ? AND a.anulada = 0
+    ORDER BY a.fecha DESC, a.id DESC
+  `).all(fechaLocal);
+  return { fecha: fechaLocal, abonos: filas, total: filas.reduce((s, a) => s + a.monto, 0) };
+}
+
 function obtener(ventaId) {
   const db = getDb();
   const venta = db.prepare(`
@@ -160,6 +316,10 @@ function obtener(ventaId) {
   if (!venta) return null;
 
   venta.items = db.prepare(`SELECT * FROM venta_items WHERE venta_id = ? ORDER BY id`).all(ventaId);
+  if (esFiado(venta.metodo_pago)) {
+    venta.abonos = listarAbonos(ventaId);
+    venta.saldo = venta.total - venta.abonos.filter(a => !a.anulada).reduce((s, a) => s + a.monto, 0);
+  }
   return venta;
 }
 
@@ -283,7 +443,14 @@ function anular({ ventaId, usuarioId, motivo }) {
   // gimnasio. Devolver el total completo dejaria la caja corta por el importe de
   // lo que nunca estuvo dentro.
   const reparto = repartoDe(ventaId);
-  const devuelveEfectivo = esEfectivo(venta.metodo_pago) && reparto.dentro > 0;
+  // Una venta fiada no metio nada al cajon al venderse; lo que entro fue lo que se
+  // cobro despues en efectivo, abono por abono, y eso es lo que se devuelve.
+  const fiada = esFiado(venta.metodo_pago);
+  const aDevolver = fiada
+    ? db.prepare(`SELECT dentro, metodo FROM venta_abonos WHERE venta_id = ? AND anulada = 0`).all(ventaId)
+        .filter(a => esEfectivo(a.metodo)).reduce((s, a) => s + a.dentro, 0)
+    : (esEfectivo(venta.metodo_pago) ? reparto.dentro : 0);
+  const devuelveEfectivo = aDevolver > 0;
   if (devuelveEfectivo && !caja.sesionAbierta()) {
     return { ok: false, motivo: 'sin_caja_abierta' };
   }
@@ -300,25 +467,27 @@ function anular({ ventaId, usuarioId, motivo }) {
     }
 
     db.prepare(`UPDATE ventas SET anulada = 1 WHERE id = ?`).run(ventaId);
+    if (fiada) db.prepare(`UPDATE venta_abonos SET anulada = 1 WHERE venta_id = ? AND anulada = 0`).run(ventaId);
     db.prepare(`
       INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, fecha, detalle)
       VALUES (?, 'venta_anulada', 'ventas', ?, ?, ?)
     `).run(usuarioId || null, ventaId, new Date().toISOString(),
            JSON.stringify({ motivo: motivo || null, total: venta.total, metodoPago: venta.metodo_pago,
-                            dentroDeCaja: reparto.dentro, fueraDeCaja: reparto.fuera }));
+                            dentroDeCaja: reparto.dentro, fueraDeCaja: reparto.fuera,
+                            efectivoDevuelto: aDevolver }));
 
     if (devuelveEfectivo) {
       const mov = caja.registrarMovimiento({
         tipo: 'egreso',
         concepto: 'Anulación de venta #' + ventaId,
-        monto: reparto.dentro,
+        monto: aDevolver,
         usuarioId,
         origen: 'venta',
       });
       if (!mov.ok) throw new VentaRechazada(mov.motivo);
     }
 
-    return { ok: true, ventaId, devuelto: reparto.dentro, fueraDeCaja: reparto.fuera };
+    return { ok: true, ventaId, devuelto: aDevolver, fueraDeCaja: reparto.fuera };
   });
 
   try {
@@ -332,4 +501,5 @@ function anular({ ventaId, usuarioId, motivo }) {
 module.exports = {
   registrar, obtener, listarDelDia, totalesDelDia,
   fueraDeCajaDelDia, fueraDeCajaEntre, anular, TOPE_LINEAS,
+  saldoFiado, abonar, abonarSinAtrapar, AbonoRechazado, fiadasPendientes, listarAbonos, abonosDelDia,
 };
