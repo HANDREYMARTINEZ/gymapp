@@ -212,7 +212,12 @@ function componerMensaje({ destino, config, gimnasio, logo, paraPantalla = false
 // Quien deberia recibir correo, con el mismo criterio de "vencida" que usan el
 // kiosco y la pantalla de Clientes: se reutiliza cargarEstados() en vez de
 // escribir aqui otra definicion que dejaria de coincidir a la primera.
-function destinatarios({ incluyePorVencer = true, cadaDias = 15 } = {}) {
+// `repetir` es la excepcion al freno de "no repetir": deja volver a escribirle a
+// quien ya recibio el aviso en este periodo. Solo se usa cuando alguien lo pide a
+// mano desde Configuracion -- la ronda automatica nunca lo activa --, porque el
+// freno existe para que abrir la app dos veces no mande dos correos, no para
+// impedir un reenvio que se quiere de verdad.
+function destinatarios({ incluyePorVencer = true, cadaDias = 15 } = {}, { repetir = false } = {}) {
   const db = getDb();
   const { cargarEstados } = require('../db/repos/panel-clientes');
   const { elegirMembresiaGobernante } = require('./membresias-logica');
@@ -276,8 +281,11 @@ function destinatarios({ incluyePorVencer = true, cadaDias = 15 } = {}) {
   sinCorreo.sort((a, b) => a.nombre.localeCompare(b.nombre));
   correoInvalido.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
+  // Al repetir, los ya avisados siguen marcados (la pantalla dice cuantos son) pero
+  // entran en la ronda.
   return {
-    porEnviar: elegidos.filter(d => !d.yaAvisado),
+    repetir,
+    porEnviar: repetir ? elegidos : elegidos.filter(d => !d.yaAvisado),
     yaAvisados: elegidos.filter(d => d.yaAvisado),
     sinCorreo,
     correoInvalido,
@@ -340,7 +348,7 @@ const esperar = (ms) => new Promise(r => setTimeout(r, ms));
 // Manda la ronda. Devuelve siempre, tambien si todo falla: quien la lanzo tiene
 // que poder ver que paso, y una excepcion a medio camino dejaria media lista
 // enviada y sin explicacion.
-async function enviarRonda({ manual = false } = {}) {
+async function enviarRonda({ manual = false, repetir = false } = {}) {
   const config = leerConfig();
   if (!obtenerDekEnMemoria()) return { ok: false, motivo: 'cifrado_cerrado' };
   if (!config.remitente) return { ok: false, motivo: 'sin_remitente' };
@@ -348,13 +356,16 @@ async function enviarRonda({ manual = false } = {}) {
   const password = correo.leerPassword();
   if (!password) return { ok: false, motivo: 'sin_password' };
 
-  const lista = destinatarios(config);
+  // Repetir solo vale si lo pidio una persona. La ronda automatica que corre al
+  // abrir la app no puede reenviar nunca: seria el envio doble que el freno evita.
+  const repitiendo = manual && repetir;
+  const lista = destinatarios(config, { repetir: repitiendo });
   const gimnasio = datosGimnasio();
   const logo = logoDelGimnasio();
   const transporte = correo.crearTransporte({ remitente: config.remitente, password });
 
   const resultado = {
-    ok: true, manual,
+    ok: true, manual, repetir: repitiendo,
     enviados: 0, fallidos: 0,
     sinCorreo: lista.sinCorreo.length,
     correoInvalido: lista.correoInvalido.length,
@@ -401,7 +412,8 @@ async function enviarRonda({ manual = false } = {}) {
     VALUES (NULL, ?, 'recordatorios', NULL, ?, ?)
   `).run(manual ? 'recordatorios_manual' : 'recordatorios_automatico',
          new Date().toISOString(),
-         JSON.stringify({ enviados: resultado.enviados, fallidos: resultado.fallidos, sinCorreo: resultado.sinCorreo }));
+         JSON.stringify({ enviados: resultado.enviados, fallidos: resultado.fallidos, sinCorreo: resultado.sinCorreo,
+                          repetir: repitiendo, yaAvisados: resultado.yaAvisados }));
 
   return resultado;
 }

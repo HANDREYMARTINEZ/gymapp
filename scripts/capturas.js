@@ -151,7 +151,9 @@ async function sembrar() {
   const clientes = require('../electron/db/repos/clientes');
   const c1 = clientes.crear({ documento: '1020304050', nombre: 'Carolina Ríos', telefono: '3115557788', email: 'caro@mail.com' });
   const c2 = clientes.crear({ documento: '1098765432', nombre: 'Andrés Gómez', telefono: '3129998877' });
-  const c3 = clientes.crear({ documento: '1122334455', nombre: 'Marcela Duque', telefono: '3004445566' });
+  // Con correo y con la membresia vencida: es la que hace que la seccion de
+  // recordatorios tenga a alguien a quien escribirle en las capturas.
+  const c3 = clientes.crear({ documento: '1122334455', nombre: 'Marcela Duque', telefono: '3004445566', email: 'marce@mail.com' });
   // Uno sin cedula real, para ver el aviso de documento provisional.
   const c4 = clientes.crear({ nombre: 'Jorge Sin Cédula', telefono: '3011112233' });
 
@@ -237,6 +239,12 @@ async function sembrar() {
                   VALUES (?, ?, ?, 'manual', NULL, 0, 1)`).run(j + 1, f + 'T12:00:00.000Z', f);
     }
   }
+
+  // Un recordatorio ya enviado: asi la seccion ensena el caso de "ya avisados" y
+  // la casilla para volver a escribirles.
+  db.prepare(`INSERT INTO recordatorios_enviados (cliente_id, membresia_id, tipo, email, fecha, ok, error)
+              VALUES (?, ?, 'vencida', 'marce@mail.com', ?, 1, NULL)`)
+    .run(c3, m3, new Date(Date.now() - 2 * 86400000).toISOString());
 
   anotar('Datos de ejemplo sembrados (hoy = ' + hoy + ').');
 }
@@ -470,6 +478,36 @@ app.whenReady().then(async () => {
     })()`);
     await esperar(400);
     await capturar('16c-configuracion-puerta-sin-guardar');
+
+    // Recordatorios, con alguien ya avisado: ahi sale la casilla para volver a
+    // escribirle (15-sep-2026). Se marca para ver como queda el boton de enviar.
+    await js(`(() => {
+      const h = [...document.querySelectorAll('main h2')].find(x => x.textContent.indexOf('Recordatorios') === 0);
+      if (!h) return false;
+      h.scrollIntoView({ block: 'start' });
+      return true;
+    })()`);
+    await esperar(500);
+    await capturar('16d-configuracion-recordatorios');
+    const marcoRepetir = await js(`(() => {
+      const c = [...document.querySelectorAll('main input[type=checkbox]')]
+        .find(x => (x.parentElement.textContent || '').indexOf('Volver a escribirles') >= 0);
+      if (!c) return false;
+      c.click();
+      return true;
+    })()`);
+    if (!marcoRepetir) anotar('  NO se encontro la casilla de volver a escribirles');
+    else {
+      // La caja de "Ahora mismo" queda mas abajo que el encabezado de la seccion.
+      await js(`(() => {
+        const h = [...document.querySelectorAll('main h4')].find(x => x.textContent.indexOf('Ahora mismo') === 0);
+        if (!h) return false;
+        h.scrollIntoView({ block: 'center' });
+        return true;
+      })()`);
+      await esperar(400);
+      await capturar('16e-recordatorios-repetir');
+    }
 
     // ---- Panel de desarrollador ------------------------------------------
     // Se sale y se vuelve a entrar con Ctrl+Alt+D, que es el unico camino.

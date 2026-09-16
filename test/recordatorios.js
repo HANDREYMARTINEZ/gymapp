@@ -285,6 +285,31 @@ app.whenReady().then(async () => {
     check('porque los reconoce como ya avisados', segunda.yaAvisados === 2);
     check('y no se mandaron mas correos que los dos primeros', enviados.length === 2);
 
+    // ---- Reenviar a proposito (15-sep-2026) ------------------------------
+    // El freno de arriba es contra el envio doble por descuido, no contra el
+    // reenvio que se pide a mano: si un correo se cayo o se corrigio la plantilla,
+    // hay que poder volver a mandarlo.
+    const previaNormal = recordatorios.destinatarios(recordatorios.leerConfig());
+    const previaRepite = recordatorios.destinatarios(recordatorios.leerConfig(), { repetir: true });
+    check('la vista previa normal no lista a los ya avisados',
+          previaNormal.porEnviar.length === 0 && previaNormal.yaAvisados.length === 2);
+    check('pero al repetir si los lista',
+          previaRepite.porEnviar.length === 2 && previaRepite.yaAvisados.length === 2,
+          'porEnviar=' + previaRepite.porEnviar.length);
+
+    const repetida = await recordatorios.enviarRonda({ manual: true, repetir: true });
+    check('reenviar a mano vuelve a escribirles', repetida.enviados === 2, 'enviados=' + repetida.enviados);
+    check('y los correos salieron de verdad', enviados.length === 4, 'correos=' + enviados.length);
+    check('la ronda dice que fue un reenvio', repetida.repetir === true);
+    check('queda anotado como reenvio en auditoria',
+          JSON.parse(db.prepare("SELECT detalle FROM auditoria WHERE accion='recordatorios_manual' ORDER BY id DESC LIMIT 1").get().detalle).repetir === true);
+
+    // La automatica NO puede repetir aunque se lo pidan: es la que corre sola al
+    // abrir la app, y ahi el freno tiene que seguir entero.
+    const automatica = await recordatorios.enviarRonda({ repetir: true });
+    check('la ronda automatica nunca reenvia', automatica.enviados === 0, 'enviados=' + automatica.enviados);
+    check('y no se colo ningun correo mas', enviados.length === 4, 'correos=' + enviados.length);
+
     // Pasado el periodo si vuelve a tocar: se envejecen los registros a mano.
     db.prepare("UPDATE recordatorios_enviados SET fecha = ?").run(new Date(Date.now() - 20 * 86400000).toISOString());
     const tercera = await recordatorios.enviarRonda({ manual: true });

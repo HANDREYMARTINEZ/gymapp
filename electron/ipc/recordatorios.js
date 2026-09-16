@@ -27,9 +27,11 @@ ipcMain.handle('recordatorios:estado', () => {
 
 // La lista completa, con nombre y correo de cada uno. Se mira antes de mandar
 // nada: la primera ronda de correos de verdad no se lanza a ciegas.
-ipcMain.handle('recordatorios:previsualizar', () => {
+ipcMain.handle('recordatorios:previsualizar', (_evt, opciones) => {
   const config = recordatorios.leerConfig();
-  return { ok: true, ...recordatorios.destinatarios(config) };
+  // Con repetir=true la lista incluye tambien a los que ya recibieron el aviso en
+  // este periodo, que es justo lo que se quiere ver antes de reenviar.
+  return { ok: true, ...recordatorios.destinatarios(config, { repetir: !!(opciones && opciones.repetir) }) };
 });
 
 ipcMain.handle('recordatorios:guardar', (_evt, { config, password }) => {
@@ -56,7 +58,8 @@ ipcMain.handle('recordatorios:prueba', () => recordatorios.enviarPrueba());
 
 ipcMain.handle('recordatorios:vistaPrevia', (_evt, tipo) => recordatorios.vistaPrevia(tipo));
 
-ipcMain.handle('recordatorios:enviarAhora', () => recordatorios.enviarRonda({ manual: true }));
+ipcMain.handle('recordatorios:enviarAhora', (_evt, opciones) =>
+  recordatorios.enviarRonda({ manual: true, repetir: !!(opciones && opciones.repetir) }));
 
 ipcMain.handle('recordatorios:historial', (_evt, limite) => ({
   ok: true, filas: recordatorios.historial(limite),

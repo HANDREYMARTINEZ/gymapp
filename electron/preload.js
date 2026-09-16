@@ -55,12 +55,12 @@ contextBridge.exposeInMainWorld('api', {
   // Recordatorios de vencimiento por correo.
   recordatorios: {
     estado: () => ipcRenderer.invoke('recordatorios:estado'),
-    previsualizar: () => ipcRenderer.invoke('recordatorios:previsualizar'),
+    previsualizar: (opciones) => ipcRenderer.invoke('recordatorios:previsualizar', opciones),
     guardar: (datos) => ipcRenderer.invoke('recordatorios:guardar', datos),
     verificar: () => ipcRenderer.invoke('recordatorios:verificar'),
     prueba: () => ipcRenderer.invoke('recordatorios:prueba'),
     vistaPrevia: (tipo) => ipcRenderer.invoke('recordatorios:vistaPrevia', tipo),
-    enviarAhora: () => ipcRenderer.invoke('recordatorios:enviarAhora'),
+    enviarAhora: (opciones) => ipcRenderer.invoke('recordatorios:enviarAhora', opciones),
     historial: (limite) => ipcRenderer.invoke('recordatorios:historial', limite),
   },
 

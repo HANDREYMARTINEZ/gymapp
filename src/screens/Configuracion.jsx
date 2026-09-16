@@ -114,6 +114,9 @@ export default function Configuracion({ usuarioActual }) {
   const [trabajandoRec, setTrabajandoRec] = useState('');
   const [avisoRec, setAvisoRec] = useState(null);
   const [confirmaEnvio, setConfirmaEnvio] = useState(false);
+  // Reenviar a quien ya se le escribio en este periodo. Se pide a mano y para una
+  // sola ronda: no se guarda en la configuracion ni afecta a la automatica.
+  const [repetirEnvio, setRepetirEnvio] = useState(false);
   const [previaHtml, setPreviaHtml] = useState(null);
   const [tipoPrevia, setTipoPrevia] = useState('vencida');
 
@@ -392,7 +395,7 @@ export default function Configuracion({ usuarioActual }) {
 
   async function verPrevia() {
     setTrabajandoRec('previa');
-    const r = await window.api.recordatorios.previsualizar();
+    const r = await window.api.recordatorios.previsualizar({ repetir: repetirEnvio });
     setTrabajandoRec('');
     if (r.ok) setPrevia(r);
   }
@@ -408,7 +411,7 @@ export default function Configuracion({ usuarioActual }) {
     setTrabajandoRec('enviar');
     setAvisoRec(null);
     setConfirmaEnvio(false);
-    const r = await window.api.recordatorios.enviarAhora();
+    const r = await window.api.recordatorios.enviarAhora({ repetir: repetirEnvio });
     setTrabajandoRec('');
     if (!r.ok) {
       const textos = {
@@ -1081,21 +1084,33 @@ export default function Configuracion({ usuarioActual }) {
               </div>
 
               {/* A quien le tocaria ahora mismo. Se ve antes de mandar nada. */}
-              {recResumen && (
+              {recResumen && (() => { const aEnviar = recResumen.porEnviar + (repetirEnvio ? recResumen.yaAvisados : 0); return (
                 <div style={{ padding: 14, border: '1px solid var(--borde)', borderRadius: 'var(--radio)',
                               background: 'var(--superficie)', minWidth: 300 }}>
                   <h4 style={{ marginTop: 0 }}>Ahora mismo</h4>
                   <div style={{ fontSize: 32, fontWeight: 700, color: 'var(--acento-claro)' }}>
-                    {recResumen.porEnviar}
+                    {aEnviar}
                   </div>
                   <div style={{ color: 'var(--texto-suave)', marginBottom: 10 }}>
                     correos por enviar — {recResumen.vencidas} vencidas
                     {rec.incluyePorVencer && <>, {recResumen.porVencer} por vencer</>}
                   </div>
 
+                  {/* El freno de "no repetir" evita el envio doble por abrir la app
+                      dos veces, pero a veces hay que reenviar a proposito: se cayo
+                      el correo, o se corrigio la plantilla. Esta casilla es la
+                      excepcion, y siempre a mano: la ronda automatica nunca repite. */}
                   {recResumen.yaAvisados > 0 && (
                     <div style={{ color: 'var(--texto-tenue)' }}>
-                      {recResumen.yaAvisados} ya recibieron el aviso en este periodo.
+                      {recResumen.yaAvisados === 1
+                        ? '1 ya recibió el aviso en este periodo.'
+                        : recResumen.yaAvisados + ' ya recibieron el aviso en este periodo.'}
+                      <label style={{ display: 'block', marginTop: 6, color: 'var(--texto-suave)' }}>
+                        <input type="checkbox" checked={repetirEnvio}
+                               onChange={e => { setRepetirEnvio(e.target.checked); setConfirmaEnvio(false); setPrevia(null); }} />
+                        {' '}Volver a escribirle{recResumen.yaAvisados === 1 ? '' : 's'} también
+                        {recResumen.yaAvisados === 1 ? ' a esa persona' : ' a esas ' + recResumen.yaAvisados + ' personas'}
+                      </label>
                     </div>
                   )}
                   {recResumen.sinCorreo > 0 && (
@@ -1130,16 +1145,20 @@ export default function Configuracion({ usuarioActual }) {
 
                   {!confirmaEnvio ? (
                     <button onClick={() => { setConfirmaEnvio(true); setAvisoRec(null); }}
-                            disabled={!!trabajandoRec || recResumen.porEnviar === 0}
+                            disabled={!!trabajandoRec || aEnviar === 0}
                             style={{ marginTop: 8, width: '100%' }}>
-                      Enviar la ronda ahora
+                      {repetirEnvio ? 'Enviar la ronda ahora (repitiendo)' : 'Enviar la ronda ahora'}
                     </button>
                   ) : (
                     <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--aviso)',
                                   background: 'var(--aviso-fondo)', borderRadius: 'var(--radio)' }}>
                       <p style={{ margin: '0 0 8px' }}>
-                        Se van a enviar <b>{recResumen.porEnviar}</b> correos de verdad, a
-                        clientes de verdad. Tarda unos {Math.ceil(recResumen.porEnviar * 3 / 60)} minutos.
+                        Se van a enviar <b>{aEnviar}</b> correos de verdad, a
+                        clientes de verdad. Tarda unos {Math.ceil(aEnviar * 3 / 60)} minutos.
+                        {repetirEnvio && recResumen.yaAvisados > 0 && (
+                          <> De esos, <b>{recResumen.yaAvisados}</b> ya recibieron el aviso en este periodo
+                          y lo van a recibir otra vez.</>
+                        )}
                       </p>
                       <button onClick={enviarAhora} disabled={!!trabajandoRec}>
                         {trabajandoRec === 'enviar' ? 'Enviando...' : 'Sí, enviar'}
@@ -1149,7 +1168,7 @@ export default function Configuracion({ usuarioActual }) {
                     </div>
                   )}
                 </div>
-              )}
+              ); })()}
             </div>
 
             {avisoRec && (
