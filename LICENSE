@@ -1,0 +1,21 @@
+Copyright (c) 2026 H.A.M.C Solutions. Todos los derechos reservados.
+
+Este software y su código fuente son propiedad de H.A.M.C Solutions. No se
+concede ninguna licencia de uso, copia, modificación, fusión, publicación,
+distribución, sublicencia ni venta, ni total ni parcial, salvo autorización
+previa y por escrito del titular.
+
+EL SOFTWARE SE ENTREGA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O
+IMPLÍCITA, INCLUIDAS ENTRE OTRAS LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD
+PARA UN FIN DETERMINADO Y NO INFRACCIÓN. EN NINGÚN CASO EL TITULAR SERÁ
+RESPONSABLE DE RECLAMACIÓN, DAÑO U OTRA RESPONSABILIDAD, SEA EN UNA ACCIÓN
+CONTRACTUAL, EXTRACONTRACTUAL O DE OTRO TIPO, DERIVADA DEL SOFTWARE O DE SU USO
+U OTRAS OPERACIONES CON EL SOFTWARE.
+
+---
+
+Componentes de terceros
+
+Las bibliotecas bajo sidecar-huella/libs/ forman parte del SDK de DigitalPersona
+(One Touch for Windows) y se rigen por los términos de su propio licenciante.
+No están cubiertas por este aviso ni se redistribuyen bajo él.
