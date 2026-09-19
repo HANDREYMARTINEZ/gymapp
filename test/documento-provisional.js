@@ -216,6 +216,44 @@ app.whenReady().then(async () => {
           vaciado.documento_provisional === 1 && /^1234\d{4}$/.test(vaciado.documento),
           'documento=' + vaciado.documento);
 
+    // ---- La cedula repetida ---------------------------------------------
+    //
+    // `documento` es UNIQUE. Hasta el 18-sep-2026 una cedula repetida reventaba
+    // con el error crudo de SQLite, la promesa del formulario se rechazaba y la
+    // pantalla se quedaba en "Guardando..." para siempre, con el boton de
+    // Cancelar tambien bloqueado: habia que salir por el menu y reescribirlo
+    // todo. Es el caso mas comun del mostrador: volver a registrar a alguien
+    // que ya estaba.
+    const otroMas = clientesRepo.crear({ documento: '4433221100', nombre: 'Tercero' });
+    check('un cliente con cedula libre si se crea', Number.isInteger(otroMas), JSON.stringify(otroMas));
+
+    const cuantosAntes = db.prepare('SELECT COUNT(*) AS n FROM clientes').get().n;
+    const repetida = clientesRepo.crear({ documento: '4433221100', nombre: 'Tercero Otra Vez' });
+    check('crear con una cedula que ya existe no revienta: avisa',
+          repetida && repetida.ok === false && repetida.motivo === 'documento_duplicado',
+          JSON.stringify(repetida));
+    check('y dice de quien es esa cedula, para poder buscarlo',
+          repetida.clienteId === otroMas && repetida.nombre === 'Tercero', JSON.stringify(repetida));
+    check('no se creo ningun cliente a medias',
+          db.prepare('SELECT COUNT(*) AS n FROM clientes').get().n === cuantosAntes);
+
+    const cuarto = clientesRepo.crear({ documento: '1199887766', nombre: 'Cuarto' });
+    const alEditar = clientesRepo.editar(cuarto, {
+      documento: '4433221100', nombre: 'Cuarto', telefono: null,
+      email: null, foto: null, f_nacimiento: null, contacto_emg: null, notas: null,
+    });
+    check('editar poniendole la cedula de otro tampoco revienta',
+          alEditar && alEditar.ok === false && alEditar.motivo === 'documento_duplicado',
+          JSON.stringify(alEditar));
+    check('y el cliente se queda con la suya',
+          clientesRepo.obtenerPorId(cuarto).documento === '1199887766',
+          clientesRepo.obtenerPorId(cuarto).documento);
+    check('guardarse a si mismo con su propia cedula sigue funcionando',
+          clientesRepo.editar(cuarto, {
+            documento: '1199887766', nombre: 'Cuarto', telefono: null,
+            email: null, foto: null, f_nacimiento: null, contacto_emg: null, notas: null,
+          }) === true);
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

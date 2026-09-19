@@ -485,6 +485,87 @@ app.whenReady().then(async () => {
     check('y deshace el tiquete: la transaccion no deja uno gastado sin asistencia',
           usadosCar === 0 && asisCar === 0, 'usados=' + usadosCar + ' asistencias=' + asisCar);
 
+    // ------------------------------------------------- frenos del 18-sep-2026
+    //
+    // Tres agujeros que se encontraron revisando la app entera, los tres del
+    // mismo tipo: el mostrador tecleaba algo imposible y la app lo guardaba.
+
+    if (!caja.sesionAbierta()) caja.abrir({ usuarioId, baseInicial: 100000 });
+
+    const julia = clientes.crear({ documento: '18091', nombre: 'Julia Frenos', telefono: '310' });
+    const deJulia = membresias.vender({ clienteId: julia, planId: mensual, usuarioId });
+
+    // 1. Pagar MAS de lo que se debe. Antes se aceptaba: el saldo quedaba en
+    //    negativo y la caja esperaba un dinero que nunca entro al cajon.
+    const esperadoAntes = caja.resumen(caja.sesionAbierta().id).esperado;
+    const sobrepago = membresias.registrarPago({ membresiaId: deJulia, monto: 700000, metodo: 'Efectivo', usuarioId });
+    check('un pago mayor que el saldo se rechaza',
+          sobrepago.ok === false && sobrepago.motivo === 'mas_que_el_saldo', JSON.stringify(sobrepago));
+    check('y dice cuanto falta de verdad', sobrepago.saldo === 70000, 'saldo=' + sobrepago.saldo);
+    check('el sobrepago rechazado no toca la caja',
+          caja.resumen(caja.sesionAbierta().id).esperado === esperadoAntes);
+    check('el saldo sigue entero', membresias.calcularSaldoPendiente(deJulia) === 70000);
+
+    check('un monto con decimales se rechaza',
+          membresias.registrarPago({ membresiaId: deJulia, monto: 1000.5, metodo: 'Efectivo', usuarioId }).motivo === 'monto_invalido');
+
+    check('pagar justo lo que falta si entra',
+          membresias.registrarPago({ membresiaId: deJulia, monto: 70000, metodo: 'Efectivo', usuarioId }).ok === true);
+    check('y despues ya no se puede pagar mas',
+          membresias.registrarPago({ membresiaId: deJulia, monto: 1000, metodo: 'Efectivo', usuarioId }).motivo === 'mas_que_el_saldo');
+
+    // 2. Pagar una membresia ELIMINADA. Anular anula sus pagos, pero uno
+    //    registrado despues se quedaba vivo y sumaba a los ingresos del dia.
+    const deJulia2 = membresias.vender({ clienteId: julia, planId: mensual, usuarioId, fInicio: enDias(31) });
+    membresias.anular({ membresiaId: deJulia2, usuarioId, motivo: 'prueba' });
+    check('no se puede pagar una membresia anulada',
+          membresias.registrarPago({ membresiaId: deJulia2, monto: 1000, metodo: 'Efectivo', usuarioId }).motivo === 'esta_anulada');
+    check('ni una que no existe',
+          membresias.registrarPago({ membresiaId: 99999, monto: 1000, metodo: 'Efectivo', usuarioId }).motivo === 'no_existe');
+
+    // 3. Descuento imposible. El <input max=100> no frena al teclear, y un 150%
+    //    daba una membresia con precio NEGATIVO.
+    let descuentoLanzo = null;
+    try {
+      membresias.vender({ clienteId: julia, planId: mensual, usuarioId, descuentoPct: 150 });
+    } catch (e) { descuentoLanzo = e.message; }
+    check('un descuento del 150% no se vende', descuentoLanzo === 'descuento_invalido', String(descuentoLanzo));
+    check('y renovando contesta con ese motivo, no con "fecha_invalida"',
+          membresias.renovar({ membresiaId: deJulia, usuarioId, descuentoPct: 150 }).motivo === 'descuento_invalido');
+    check('el descuento normal sigue funcionando',
+          db.prepare('SELECT precio_pagado p FROM membresias WHERE id = ?')
+            .get(membresias.vender({ clienteId: julia, planId: mensual, usuarioId, descuentoPct: 50, fInicio: enDias(60) })).p === 35000);
+
+    // 4. Pausar dos veces. Dejaba DOS pausas abiertas y reactivar cerraba una
+    //    sola: la membresia se quedaba pausada y el kiosco no dejaba entrar.
+    const kena = clientes.crear({ documento: '18092', nombre: 'Kena Pausas', telefono: '311' });
+    const deKena = membresias.vender({ clienteId: kena, planId: mensual, usuarioId, fInicio: haceDias(10) });
+    const pausa1 = pausas.pausar({ membresiaId: deKena, motivo: 'viaje', usuarioId });
+    const pausa2 = pausas.pausar({ membresiaId: deKena, motivo: 'otra vez', usuarioId });
+    check('la primera pausa entra', pausa1.ok === true);
+    check('la segunda se rechaza', pausa2.ok === false && pausa2.motivo === 'ya_pausada', JSON.stringify(pausa2));
+    check('y solo queda una pausa abierta',
+          db.prepare('SELECT COUNT(*) n FROM membresia_pausas WHERE membresia_id = ? AND f_fin IS NULL').get(deKena).n === 1);
+
+    pausas.reactivar(deKena);
+    check('tras reactivar, la membresia deja de estar pausada', pausas.hayPausaActiva(deKena) === false);
+    check('reactivar dos veces avisa en vez de reventar',
+          pausas.reactivar(deKena).motivo === 'sin_pausa');
+
+    // Aunque una base vieja arrastre dos pausas abiertas, reactivar las cierra
+    // todas: si no, la membresia se quedaba trabada para siempre.
+    db.prepare(`INSERT INTO membresia_pausas (membresia_id, f_inicio, f_fin, motivo, usuario_id, creada_en)
+                VALUES (?, ?, NULL, 'vieja', ?, ?)`).run(deKena, haceDias(3), usuarioId, new Date().toISOString());
+    db.prepare(`INSERT INTO membresia_pausas (membresia_id, f_inicio, f_fin, motivo, usuario_id, creada_en)
+                VALUES (?, ?, NULL, 'vieja 2', ?, ?)`).run(deKena, haceDias(2), usuarioId, new Date().toISOString());
+    pausas.reactivar(deKena);
+    check('con dos pausas abiertas heredadas, reactivar cierra las dos',
+          db.prepare('SELECT COUNT(*) n FROM membresia_pausas WHERE membresia_id = ? AND f_fin IS NULL').get(deKena).n === 0);
+    check('y la membresia ya no esta pausada', pausas.hayPausaActiva(deKena) === false);
+
+    check('no se pausa una membresia eliminada',
+          pausas.pausar({ membresiaId: deJulia2, motivo: 'x', usuarioId }).motivo === 'esta_anulada');
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

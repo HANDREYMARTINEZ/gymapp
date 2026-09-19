@@ -35,9 +35,40 @@ function siguienteDocumentoProvisional() {
   }
 }
 
+// Quien tiene ya esa cedula, si la tiene alguien.
+//
+// `documento` es UNIQUE, asi que guardar una repetida revienta con un error de
+// SQLite que subia crudo hasta la pantalla: el formulario se quedaba en
+// "Guardando..." para siempre y ni siquiera dejaba cancelar. Se comprueba antes
+// y se contesta con el nombre del que ya la tiene, que es lo que necesita quien
+// esta en el mostrador -- casi siempre es la misma persona, ya registrada.
+function duenoDelDocumento(documento, exceptoId) {
+  if (!documento) return null;
+  return exceptoId
+    ? getDb().prepare(`SELECT id, nombre, activo FROM clientes WHERE documento = ? AND id != ?`).get(documento, exceptoId)
+    : getDb().prepare(`SELECT id, nombre, activo FROM clientes WHERE documento = ?`).get(documento);
+}
+
+function duplicado(dueno) {
+  return {
+    ok: false,
+    motivo: 'documento_duplicado',
+    clienteId: dueno.id,
+    nombre: dueno.nombre,
+    activo: dueno.activo === 1,
+  };
+}
+
+// Devuelve el id nuevo (un numero) cuando todo va bien, y un objeto
+// { ok: false, motivo } cuando la cedula ya es de otro. Quien llame tiene que
+// mirar si lo que recibe es un numero.
 function crear(cliente) {
   const pedido = String(cliente.documento || '').trim();
   const esProvisional = !pedido;
+
+  const dueno = duenoDelDocumento(pedido);
+  if (dueno) return duplicado(dueno);
+
   const documento = esProvisional ? siguienteDocumentoProvisional() : pedido;
   const ult4 = documento ? documento.slice(-4) : null;
   const info = getDb().prepare(`
@@ -92,6 +123,10 @@ function editar(id, cambios) {
   // aviso que no se apaga cuando ya se atendio deja de leerse.
   const actual = getDb().prepare(`SELECT documento, documento_provisional FROM clientes WHERE id = ?`).get(id);
   const eraProvisional = !!(actual && actual.documento_provisional === 1);
+
+  // Lo mismo que en crear(): la cedula de otro no puede llegar al UNIQUE.
+  const dueno = duenoDelDocumento(pedido, id);
+  if (dueno) return duplicado(dueno);
 
   // Guardar con el documento vacio no puede dejar al cliente sin cedula: se le
   // pone una provisional, o conserva la que ya tenia. Sin esto, borrar ese campo

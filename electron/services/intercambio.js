@@ -276,8 +276,11 @@ function planPara(fila, cache, avisos) {
     // Que se hayan gastado tiquetes es prueba de que la membresia los tiene,
     // aunque el nombre no lo diga.
     const esTicketera = !!enElNombre || fila.tiquetesUsados > 0;
+    // +1 porque los dias de un plan se cuentan con el primero incluido: del 1 al
+    // 30 son 30 dias, y differenceInCalendarDays dice 29. Sin el, reimportar el
+    // archivo de la propia app inventaba planes de 29 dias.
     const dias = fila.fInicio && fila.fFin
-      ? Math.max(1, differenceInCalendarDays(parseISO(fila.fFin), parseISO(fila.fInicio)))
+      ? Math.max(1, differenceInCalendarDays(parseISO(fila.fFin), parseISO(fila.fInicio)) + 1)
       : 30;
 
     let id;
@@ -405,9 +408,12 @@ async function importarExcel(ruta, { usuarioId } = {}) {
         // Si el archivo no dice cuando termina, se calcula con los dias que dura
         // el plan. Sin esto la membresia queda sin fecha de fin y nunca vence:
         // el cliente entraria para siempre con una mensualidad de hace un ano.
+        // El mismo calculo que usa vender(): inicio + dias - 1, porque el dia de
+        // inicio cuenta. Con el +dias de antes, toda membresia importada sin
+        // fecha de fin duraba un dia mas que la misma vendida desde la app.
         let fFin = fila.fFin;
         if (!fFin && !esTicketera && plan.dias_duracion && fila.fInicio) {
-          fFin = format(addDays(parseISO(fila.fInicio), plan.dias_duracion), 'yyyy-MM-dd');
+          fFin = format(addDays(parseISO(fila.fInicio), plan.dias_duracion - 1), 'yyyy-MM-dd');
         }
 
         const info = db.prepare(`

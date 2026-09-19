@@ -33,7 +33,14 @@ function normalizarFechaInicio(f) {
 
 function vender({ clienteId, planId, usuarioId, descuentoPct = 0, fInicio: fInicioPedida = null }) {
   const plan = getDb().prepare(`SELECT * FROM planes WHERE id = ? AND activo = 1`).get(planId);
-  if (!plan) throw new Error('Plan no encontrado o inactivo');
+  if (!plan) throw new Error('plan_inactivo');
+
+  // El <input type=number min=0 max=100> no frena al teclear: escribir 150 daba
+  // una membresia con precio NEGATIVO, y ese numero se arrastra a la ficha, a
+  // los informes y al saldo.
+  const pct = Number(descuentoPct);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new Error('descuento_invalido');
+  descuentoPct = pct;
 
   const hoy = hoyISO();
   const pedida = normalizarFechaInicio(fInicioPedida);
@@ -141,8 +148,27 @@ function estadoTickets(membresiaId) {
 // Por lo mismo se exige la caja abierta: sin sesion el efectivo no tiene donde
 // quedar registrado, y aceptarlo igual seria romper el arqueo en silencio.
 function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
-  if (!monto || monto <= 0) {
+  // Entero y positivo. Un decimal entraba tal cual en una columna INTEGER y
+  // dejaba el arqueo con centavos que nadie puede contar en el cajon.
+  const n = typeof monto === 'number' ? monto : parseInt(monto, 10);
+  if (!Number.isInteger(n) || n <= 0) {
     return { ok: false, motivo: 'monto_invalido' };
+  }
+  monto = n;
+
+  const m = getDb().prepare(`SELECT id, anulada FROM membresias WHERE id = ?`).get(membresiaId);
+  if (!m) return { ok: false, motivo: 'no_existe' };
+  // Anular una membresia anula sus pagos; uno registrado DESPUES se quedaba
+  // vivo, entraba al cajon y sumaba a los ingresos del dia.
+  if (m.anulada) return { ok: false, motivo: 'esta_anulada' };
+
+  // El mismo freno que ya tenian los abonos de una venta fiada
+  // ('mas_que_el_saldo') y el cobro de la cuenta de un cliente
+  // ('mas_que_la_deuda'). Sin el, un cero de mas al teclear dejaba el saldo en
+  // negativo y el arqueo del dia esperando un dinero que no entro.
+  const saldo = calcularSaldoPendiente(membresiaId);
+  if (monto > saldo) {
+    return { ok: false, motivo: 'mas_que_el_saldo', saldo };
   }
   // Antes aceptaba cualquier texto. Con los fiados eso ya no vale: un "pago" con
   // metodo 'Fiado' bajaria el saldo sin que entrara dinero. Fiar una membresia es
@@ -329,8 +355,19 @@ function renovar({ membresiaId, usuarioId, descuentoPct = 0, fInicio = null }) {
   try {
     return { ok: true, membresiaId: vender({ clienteId: m.cliente_id, planId: m.plan_id, usuarioId, descuentoPct, fInicio }) };
   } catch (e) {
-    return { ok: false, motivo: 'fecha_invalida' };
+    // El motivo de verdad, no 'fecha_invalida' para todo: un descuento imposible
+    // y una fecha rota se arreglan de formas distintas.
+    return { ok: false, motivo: motivoDeVenta(e) };
   }
+}
+
+// Traduce lo que lanza vender() al vocabulario de motivos que entienden las
+// pantallas. Vive aqui para que el canal IPC y renovar() contesten igual.
+function motivoDeVenta(e) {
+  const texto = String(e && e.message ? e.message : e);
+  if (texto === 'descuento_invalido') return 'descuento_invalido';
+  if (texto === 'plan_inactivo') return 'plan_inactivo';
+  return 'fecha_invalida';
 }
 
 function calcularSaldoPendiente(membresiaId) {
@@ -394,4 +431,4 @@ function listarPagos(membresiaId) {
 }
 
 module.exports = {
-  ajustarTickets, estadoTickets, vender, anular, renovar, cambiarFechaInicio, registrarPago, fiar, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos };
+  ajustarTickets, estadoTickets, vender, anular, renovar, cambiarFechaInicio, registrarPago, fiar, pagosDelDia, calcularSaldoPendiente, listarPorCliente, listarPagos, motivoDeVenta };

@@ -35,6 +35,13 @@ const LABEL_ESTADO = {
 // resto se esconde detras del boton de historial.
 const VIGENTES = ['activa', 'por_vencer', 'programada', 'pausada', 'saldo_pendiente'];
 
+const MOTIVOS_PAUSA = {
+  ya_pausada: 'Esta membresía ya estaba pausada.',
+  sin_pausa: 'Esta membresía no tenía ninguna pausa abierta.',
+  esta_anulada: 'No se puede pausar una membresía eliminada.',
+  no_existe: 'Esa membresía ya no está.',
+};
+
 export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVolver }) {
   const [cliente, setCliente] = useState(null);
   const [membresias, setMembresias] = useState([]);
@@ -50,6 +57,8 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
   const [motivoPausa, setMotivoPausa] = useState('');
   const [mostrarBaja, setMostrarBaja] = useState(false);
   const [motivoBaja, setMotivoBaja] = useState('');
+  const [trabajandoPausa, setTrabajandoPausa] = useState(false);
+  const [avisoPausa, setAvisoPausa] = useState('');
   // Tiquetes: que membresia tiene el panel abierto, cuantos se anaden o quitan
   // y por que. El motivo no es obligatorio, pero queda en auditoria.
   const [mostrarTicketsId, setMostrarTicketsId] = useState(null);
@@ -124,6 +133,7 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setAvisoTickets(null);
     setMostrarBaja(false);
     setCobrando(false);
+    setAvisoPausa('');
   }
 
   async function expandir(membresiaId) {
@@ -138,14 +148,28 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
     setPausasPorMembresia(prev => ({ ...prev, [membresiaId]: pausas }));
   }
 
+  // Pausar y reactivar bloquean su boton mientras guardan: dos clics seguidos
+  // abrian dos pausas, y entonces reactivar cerraba una sola y la membresia se
+  // quedaba pausada sin que nadie entendiera por que.
   async function confirmarPausa(membresiaId) {
-    await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
+    if (trabajandoPausa) return;
+    setTrabajandoPausa(true);
+    const r = await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
+    setTrabajandoPausa(false);
+    if (r && r.ok === false) {
+      setAvisoPausa(MOTIVOS_PAUSA[r.motivo] || 'No se pudo pausar: ' + r.motivo);
+      return;
+    }
     cerrarPaneles();
     cargar();
   }
 
   async function reactivar(membresiaId) {
-    await window.api.pausas.reactivar(membresiaId);
+    if (trabajandoPausa) return;
+    setTrabajandoPausa(true);
+    const r = await window.api.pausas.reactivar(membresiaId);
+    setTrabajandoPausa(false);
+    if (r && r.ok === false) setAvisoPausa(MOTIVOS_PAUSA[r.motivo] || 'No se pudo reactivar: ' + r.motivo);
     cargar();
   }
 
@@ -208,7 +232,9 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
               </button>
             )}
             {m.estado === 'pausada'
-              ? <button onClick={(e) => { e.stopPropagation(); reactivar(m.id); }}>Reactivar</button>
+              ? <button disabled={trabajandoPausa} onClick={(e) => { e.stopPropagation(); reactivar(m.id); }}>
+                  {trabajandoPausa ? 'Reactivando...' : 'Reactivar'}
+                </button>
               : <button onClick={(e) => { e.stopPropagation(); const abrir = mostrarPausaId !== m.id; cerrarPaneles(); setMostrarPausaId(abrir ? m.id : null); }}>Pausar</button>
             }
             {/* Solo para ticketeras: en una de periodo no hay nada que ajustar. */}
@@ -229,8 +255,11 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
         {mostrarPausaId === m.id && (
           <div style={{ marginTop: 8, padding: 8, background: 'var(--superficie-alta)', borderRadius: 'var(--radio)' }} onClick={e => e.stopPropagation()}>
             <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa} onChange={e => setMotivoPausa(e.target.value)} />
-            <button onClick={() => confirmarPausa(m.id)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
-            <button onClick={cerrarPaneles} style={{ marginLeft: 8 }}>Cancelar</button>
+            <button onClick={() => confirmarPausa(m.id)} disabled={trabajandoPausa} style={{ marginLeft: 8 }}>
+              {trabajandoPausa ? 'Pausando...' : 'Confirmar pausa'}
+            </button>
+            <button onClick={cerrarPaneles} disabled={trabajandoPausa} style={{ marginLeft: 8 }}>Cancelar</button>
+            {avisoPausa && <p style={{ color: 'var(--error)', marginBottom: 0 }}>{avisoPausa}</p>}
           </div>
         )}
 
@@ -432,6 +461,10 @@ export default function ClienteFicha({ clienteId, usuarioActual, onEditar, onVol
       {mostrarVender && (
         <VenderMembresiaForm clienteId={clienteId} usuarioActual={usuarioActual}
                              onVendido={despuesDeVender} onCancelar={() => setMostrarVender(false)} />
+      )}
+
+      {avisoPausa && !mostrarPausaId && (
+        <p style={{ color: 'var(--error)', marginBottom: 0 }}>{avisoPausa}</p>
       )}
 
       <div style={{ marginTop: 12 }}>

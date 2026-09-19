@@ -66,11 +66,18 @@ export default function RegistrarPagoForm({ membresiaId, fInicioActual, saldo, f
 
     if (r && r.ok === false) {
       setGuardando(false);
-      setError(r.motivo === 'sin_caja_abierta'
-        ? 'No hay una caja abierta. Un pago en efectivo entra al cajón, así que abre la caja primero.'
-        : r.motivo === 'medio_pago_invalido'
-          ? 'Elige un medio de pago válido.'
-          : 'No se pudo registrar el pago: ' + r.motivo);
+      const textos = {
+        sin_caja_abierta: 'No hay una caja abierta. Un pago en efectivo entra al cajón, así que abre la caja primero.',
+        medio_pago_invalido: 'Elige un medio de pago válido.',
+        // El freno nuevo: un cero de más dejaba el saldo en negativo y la caja
+        // esperando un dinero que no entró.
+        mas_que_el_saldo: 'Es más de lo que falta por pagar'
+          + (r.saldo != null ? ' ($' + r.saldo.toLocaleString('es-CO') + ').' : '.'),
+        esta_anulada: 'Esta membresía está eliminada: no se le pueden registrar pagos.',
+        no_existe: 'Esa membresía ya no está.',
+        monto_invalido: 'El monto tiene que ser un número entero de pesos.',
+      };
+      setError(textos[r.motivo] || 'No se pudo registrar el pago: ' + r.motivo);
       return;
     }
 

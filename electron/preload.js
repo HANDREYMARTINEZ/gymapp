@@ -211,7 +211,16 @@ sistema: {
 kiosco: {
   marcarPorPin: (datos) => ipcRenderer.invoke('kiosco:marcarPorPin', datos),
   iniciarEscuchaHuella: () => ipcRenderer.invoke('kiosco:iniciarEscuchaHuella'),
-  onHuellaDetectada: (callback) => ipcRenderer.on('kiosco:huellaDetectada', (_evt, data) => callback(data)),
+  detenerEscuchaHuella: () => ipcRenderer.invoke('kiosco:detenerEscuchaHuella'),
+  // Devuelve la funcion para dejar de escuchar. Antes no la devolvia, asi que
+  // el kiosco -- que es la pantalla de inicio y se visita decenas de veces al
+  // dia -- iba apilando un oyente por visita: a partir de diez, Electron avisa
+  // de fuga, y todos los viejos seguian respondiendo desde pantallas cerradas.
+  onHuellaDetectada: (callback) => {
+    const oyente = (_evt, data) => callback(data);
+    ipcRenderer.on('kiosco:huellaDetectada', oyente);
+    return () => ipcRenderer.removeListener('kiosco:huellaDetectada', oyente);
+  },
 },
 
 // El Arduino que suelta el electroiman. Ver electron/services/puerta.js.

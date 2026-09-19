@@ -13,6 +13,9 @@ const MENSAJES = {
   agotada: { color: 'var(--error)', texto: 'Tickets agotados — pasa a recepción' },
   // Solo llega por un reingreso: vino hoy y despues recepcion le anulo la membresia.
   anulada: { color: 'var(--error)', texto: 'Membresía anulada — pasa a recepción' },
+  // Dado de baja. No se dice "estás dado de baja" delante de la fila: eso lo
+  // explica recepcion, que es quien lo dio de baja y sabe por que.
+  cliente_inactivo: { color: 'var(--error)', texto: 'Pasa a recepción' },
 };
 
 // La puerta no cambia el veredicto: si la persona puede entrenar, su asistencia
@@ -32,6 +35,14 @@ const PUERTA = {
 export default function Kiosco() {
   const [nombreGym, setNombreGym] = useState('');
 
+  const [ult4, setUlt4] = useState('');
+  const [pin, setPin] = useState('');
+  const [resultado, setResultado] = useState(null);
+  const [errorCampos, setErrorCampos] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const pinRef = useRef(null);
+  const timeoutRef = useRef(null);
+
   useEffect(() => {
     window.api.config.get('gym_nombre').then(v => setNombreGym(v || 'GymApp'));
     // Sin lector conectado esto rechaza con 'sin_lector', y eso NO es un fallo:
@@ -40,18 +51,22 @@ export default function Kiosco() {
     // la pantalla, que es ruido en la consola y, el dia que haya un manejador
     // global de errores, una alarma falsa.
     window.api.kiosco.iniciarEscuchaHuella().catch(() => {});
-    window.api.kiosco.onHuellaDetectada((data) => {
+    const dejarDeEscuchar = window.api.kiosco.onHuellaDetectada((data) => {
       setResultado(data);
       programarLimpieza();
     });
+
+    // Al salir del kiosco se apaga la escucha. Sin esto el lector seguia armado
+    // en TODAS las pantallas: un dedo mientras alguien estaba en Caja o en
+    // Configuracion registraba la asistencia y mandaba abrir la puerta de la
+    // calle, sin que nadie viera un mensaje. Y como el kiosco es la pantalla de
+    // inicio, cada vuelta dejaba ademas otro oyente apilado.
+    return () => {
+      dejarDeEscuchar();
+      window.api.kiosco.detenerEscuchaHuella().catch(() => {});
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
-  const [ult4, setUlt4] = useState('');
-  const [pin, setPin] = useState('');
-  const [resultado, setResultado] = useState(null);
-  const [errorCampos, setErrorCampos] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const pinRef = useRef(null);
-  const timeoutRef = useRef(null);
 
   function limpiarTodo() {
     setUlt4('');

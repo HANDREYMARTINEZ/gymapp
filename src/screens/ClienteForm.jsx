@@ -111,21 +111,48 @@ export default function ClienteForm({ clienteExistente, onGuardado, onCancelar }
     cargarHuellas();
   }
 
+  // La cedula es UNIQUE. Antes, guardar una repetida rechazaba la promesa y
+  // este formulario se quedaba en "Guardando..." para siempre, con el boton de
+  // Cancelar tambien bloqueado: habia que salir por el menu y volver a
+  // escribirlo todo. Ahora el proceso principal contesta con el nombre de quien
+  // ya la tiene, que casi siempre es la misma persona ya registrada.
+  function avisoDuplicado(r) {
+    const quien = r.nombre ? '«' + r.nombre + '»' : 'otro cliente';
+    return 'Esa cédula ya es de ' + quien
+      + (r.activo === false ? ', que está dado de baja (búscalo en “dados de baja” y vuelve a darle de alta).' : '. Búscalo en la lista en vez de crearlo otra vez.');
+  }
+
   async function guardar() {
     if (!form.nombre.trim()) {
       setError('El nombre es obligatorio.');
       return;
     }
     setGuardando(true);
-    if (clienteExistente) {
-      await window.api.clientes.editar(clienteExistente.id, { ...form, notas, foto: null });
-    } else {
-      const id = await window.api.clientes.crear({ ...form, notas: null });
-      if (fotoPendiente) {
-        await window.api.imagenes.guardar({ entidad: 'cliente', entidadId: id, base64: fotoPendiente });
+    try {
+      if (clienteExistente) {
+        const r = await window.api.clientes.editar(clienteExistente.id, { ...form, notas, foto: null });
+        if (r && r.ok === false) {
+          setError(r.motivo === 'documento_duplicado' ? avisoDuplicado(r) : 'No se pudo guardar: ' + r.motivo);
+          return;
+        }
+      } else {
+        const r = await window.api.clientes.crear({ ...form, notas: null });
+        if (r && r.ok === false) {
+          setError(r.motivo === 'documento_duplicado' ? avisoDuplicado(r) : 'No se pudo guardar: ' + r.motivo);
+          return;
+        }
+        if (fotoPendiente) {
+          await window.api.imagenes.guardar({ entidad: 'cliente', entidadId: r, base64: fotoPendiente });
+        }
       }
+    } catch (e) {
+      // Cualquier otro fallo del proceso principal. Se dice y se devuelve el
+      // formulario: lo que no puede pasar es que se quede colgado.
+      setError('No se pudo guardar: ' + (e && e.message ? e.message : e));
+      return;
+    } finally {
+      setGuardando(false);
     }
-    setGuardando(false);
     onGuardado();
   }
 

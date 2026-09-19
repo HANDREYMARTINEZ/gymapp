@@ -171,4 +171,15 @@ async function iniciarVerificacion(templates, callbackMatch) {
   socket.send(JSON.stringify({ token: proceso.token(), accion: 'cargarTemplates', templates }));
 }
 
-module.exports = { conectar, enrolar, iniciarVerificacion, estaAbierto };
+// Dejar de atender al lector. El sidecar sigue vivo y puede seguir leyendo
+// dedos, pero sin oyente nadie registra asistencias ni abre la puerta.
+//
+// Hace falta porque la escucha se enciende al abrir el kiosco y no se apagaba
+// nunca: con la app en Caja o en Configuracion, un dedo en el lector seguia
+// marcando entrada y mandando abrir la calle sin que nadie viera nada en
+// pantalla.
+function detenerVerificacion() {
+  onMatchCallback = null;
+}
+
+module.exports = { conectar, enrolar, iniciarVerificacion, detenerVerificacion, estaAbierto };

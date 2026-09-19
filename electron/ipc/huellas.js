@@ -41,4 +41,11 @@ ipcMain.handle('kiosco:iniciarEscuchaHuella', async (evt) => {
   return { ok: true, cantidad: templates.length };
 });
 
+// La pareja de la anterior: la llama el kiosco al salir de su pantalla. Sin
+// esto el lector seguia armado en todas las demas.
+ipcMain.handle('kiosco:detenerEscuchaHuella', () => {
+  try { sidecar.detenerVerificacion(); } catch (e) {}
+  return { ok: true };
+});
+
 module.exports = {};

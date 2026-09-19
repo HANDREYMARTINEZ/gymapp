@@ -10,6 +10,14 @@ function hoyISO() {
 function registrar({ clienteId, metodo, registradoPor }) {
   const hoy = hoyISO();
 
+  // Dar de baja apaga el interruptor que respeta toda la app, pero aqui no se
+  // miraba: la plantilla de huella seguia cargada en el lector y la entrada se
+  // registraba (y abria la puerta) como si nada. El filtro esta ahora tambien
+  // en huellas.cargarTodasLasHuellas; este es el cinturon del tirante.
+  const cliente = getDb().prepare('SELECT activo FROM clientes WHERE id = ?').get(clienteId);
+  if (!cliente) return { ok: false, motivo: 'sin_membresia' };
+  if (cliente.activo === 0) return { ok: false, motivo: 'cliente_inactivo' };
+
   // Lo primero, antes de tocar ningun tiquete. Antes esto lo decidia el indice
   // unico al INSERTAR, que llega DESPUES del UPDATE que gasta el tiquete: cada
   // vez que alguien de tiquetera volvia a marcar el mismo dia, la pantalla le

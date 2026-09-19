@@ -418,6 +418,7 @@ export default function Configuracion({ usuarioActual }) {
         cifrado_cerrado: 'La base está cerrada.',
         sin_remitente: 'Falta el correo del remitente.',
         sin_password: 'Falta la contraseña de aplicación.',
+        ronda_en_curso: 'Ya hay una ronda de correos saliendo. Espera a que termine: si se lanzan dos a la vez, a cada cliente le llegan dos correos iguales.',
       };
       setAvisoRec({ tipo: 'error', texto: textos[r.motivo] || ('No se pudo enviar: ' + r.motivo) });
       return;

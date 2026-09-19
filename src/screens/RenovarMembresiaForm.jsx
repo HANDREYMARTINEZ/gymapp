@@ -5,6 +5,7 @@ const MOTIVOS = {
   plan_no_existe: 'El plan de esta membresía ya no existe en el catálogo.',
   plan_inactivo: 'El plan de esta membresía está desactivado. Actívalo en Planes o vende otro plan.',
   fecha_invalida: 'La fecha de inicio no es válida.',
+  descuento_invalido: 'El descuento va de 0 a 100.',
 };
 
 // Renovar es vender otra vez el mismo plan, asi que el formulario solo pregunta
@@ -16,11 +17,16 @@ export default function RenovarMembresiaForm({ membresia, usuarioActual, onRenov
   const [error, setError] = useState('');
 
   async function renovar() {
+    const pct = parseFloat(descuento) || 0;
+    if (pct < 0 || pct > 100) {
+      setError('El descuento va de 0 a 100.');
+      return;
+    }
     setGuardando(true);
     const r = await window.api.membresias.renovar({
       membresiaId: membresia.id,
       usuarioId: usuarioActual.id,
-      descuentoPct: parseFloat(descuento) || 0,
+      descuentoPct: pct,
       fInicio: fInicio || null,
     });
     setGuardando(false);

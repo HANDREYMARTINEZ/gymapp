@@ -179,11 +179,16 @@ app.whenReady().then(async () => {
     const membresiaId = membresias.vender({ clienteId: 1, planId: 1, usuarioId });
 
     const egresosAntes = caja.resumen(caja.sesionAbierta().id).egresos;
-    const pago = membresias.registrarPago({ membresiaId, monto: 100000, metodo: 'Efectivo', usuarioId });
+    // 94.000 de los 100.000 que cuesta el plan: quedan 6.000 de saldo para los
+    // dos pagos que vienen detras. Desde el 18-sep-2026 no se puede pagar mas de
+    // lo que se debe, asi que un abono de mas aqui se rechazaria y estas
+    // comprobaciones -- que son sobre el ARQUEO, no sobre el saldo -- no
+    // llegarian a hacerse.
+    const pago = membresias.registrarPago({ membresiaId, monto: 94000, metodo: 'Efectivo', usuarioId });
     check('el pago de membresia en efectivo se registra', pago.ok, 'motivo=' + pago.motivo);
     const trasPago = caja.resumen(caja.sesionAbierta().id);
     check('el pago de membresia en efectivo entra al arqueo',
-          trasPago.ingresos === ingresosAntes + 100000, 'ingresos=' + trasPago.ingresos);
+          trasPago.ingresos === ingresosAntes + 94000, 'ingresos=' + trasPago.ingresos);
     check('el pago no toco los egresos', trasPago.egresos === egresosAntes);
 
     const pagoTarjeta = membresias.registrarPago({ membresiaId, monto: 5000, metodo: 'Tarjeta', usuarioId });
@@ -201,6 +206,19 @@ app.whenReady().then(async () => {
     check('el bloqueo no dejo el pago registrado',
           membresias.listarPagos(membresiaId).length === pagosAntes,
           membresias.listarPagos(membresiaId).length + ' pagos');
+
+    // La cantidad de una linea tiene que ser entera y con tope, igual que en la
+    // entrada de mercancia. Sin esto, 2,5 unidades dejaban el stock en 7,5, y un
+    // codigo de barras tecleado en la casilla de la cantidad pedia miles de
+    // millones de unidades.
+    const stockAntes = productos.obtenerPorId(agua).stock;
+    check('una cantidad con decimales se rechaza',
+          ventas.registrar({ items: [{ productoId: agua, cantidad: 2.5 }], metodoPago: 'Tarjeta', usuarioId }).motivo === 'cantidad_invalida');
+    check('una cantidad por encima del tope se rechaza',
+          ventas.registrar({ items: [{ productoId: agua, cantidad: 7700304572069 }], metodoPago: 'Tarjeta', usuarioId }).motivo === 'cantidad_invalida');
+    check('y el stock se queda como estaba',
+          productos.obtenerPorId(agua).stock === stockAntes,
+          'antes=' + stockAntes + ' ahora=' + productos.obtenerPorId(agua).stock);
 
     db.close();
   } catch (e) {

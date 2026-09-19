@@ -20,11 +20,17 @@ function sinHash(fila) {
   return resto;
 }
 
+// `tieneLlave` es si ese usuario tiene ya su envoltura de la DEK. Sin ella, la
+// primera vez que entre la app le pedira la PASSPHRASE de cifrado -- que es
+// tambien la llave del panel de desarrollador --, asi que o se le dice a un
+// empleado el secreto que borra la base, o no puede entrar. La pantalla de
+// Usuarios lo avisa para poder arreglarlo antes: basta con que un admin le
+// ponga la contrasena desde aqui, y la llave se crea sola.
 function listar() {
   return getDb().prepare(`
     SELECT id, nombre, usuario, rol, activo, creado_en
     FROM usuarios ORDER BY activo DESC, nombre
-  `).all();
+  `).all().map(u => ({ ...u, tieneLlave: llaves.tieneLlave(u.id) }));
 }
 
 function obtenerPorId(id) {

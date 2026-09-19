@@ -41,8 +41,14 @@ function registrar({ items, metodoPago, usuarioId, clienteId, fiadoHasta }) {
   if (!fiado && !esMedioValido(metodoPago)) {
     return { ok: false, motivo: 'medio_pago_invalido' };
   }
+  // Entera, positiva y con el mismo tope que la entrada de mercancia. Sin esto
+  // una cantidad con decimales dejaba el stock en 7,5 unidades, y un codigo de
+  // barras tecleado por error en la casilla de la cantidad pedia miles de
+  // millones de unidades.
   for (const item of items) {
-    if (!item.productoId || !item.cantidad || item.cantidad <= 0) {
+    const cantidad = Number(item && item.cantidad);
+    if (!item || !item.productoId || !Number.isInteger(cantidad)
+        || cantidad <= 0 || cantidad > productos.MAX_CANTIDAD_POR_LINEA) {
       return { ok: false, motivo: 'cantidad_invalida' };
     }
   }

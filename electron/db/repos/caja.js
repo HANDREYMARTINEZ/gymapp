@@ -43,7 +43,9 @@ function registrarMovimiento({ tipo, concepto, monto, usuarioId, origen = 'manua
   if (tipo !== 'ingreso' && tipo !== 'egreso') {
     return { ok: false, motivo: 'tipo_invalido' };
   }
-  if (!monto || monto <= 0) {
+  // En el cajon hay billetes, no decimales: un monto con centavos dejaba el
+  // arqueo pidiendo contar $66.000,75.
+  if (!Number.isInteger(monto) || monto <= 0) {
     return { ok: false, motivo: 'monto_invalido' };
   }
   if (!concepto || !String(concepto).trim()) {

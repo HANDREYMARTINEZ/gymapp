@@ -348,6 +348,13 @@ const esperar = (ms) => new Promise(r => setTimeout(r, ms));
 // Manda la ronda. Devuelve siempre, tambien si todo falla: quien la lanzo tiene
 // que poder ver que paso, y una excepcion a medio camino dejaria media lista
 // enviada y sin explicacion.
+// Una ronda a la vez. La lista de a quien escribir se calcula al empezar y lo
+// enviado se anota correo a correo, asi que dos rondas solapadas -- el boton
+// "Enviar ahora" mientras corre la automatica, o dos clics seguidos -- le
+// mandan DOS correos iguales a cada cliente, que es la forma mas rapida de que
+// marquen el remitente como spam.
+let rondaEnCurso = false;
+
 async function enviarRonda({ manual = false, repetir = false } = {}) {
   const config = leerConfig();
   if (!obtenerDekEnMemoria()) return { ok: false, motivo: 'cifrado_cerrado' };
@@ -355,6 +362,17 @@ async function enviarRonda({ manual = false, repetir = false } = {}) {
 
   const password = correo.leerPassword();
   if (!password) return { ok: false, motivo: 'sin_password' };
+
+  if (rondaEnCurso) return { ok: false, motivo: 'ronda_en_curso' };
+  rondaEnCurso = true;
+  try {
+    return await enviarRondaDeVerdad({ manual, repetir, config, password });
+  } finally {
+    rondaEnCurso = false;
+  }
+}
+
+async function enviarRondaDeVerdad({ manual, repetir, config, password }) {
 
   // Repetir solo vale si lo pidio una persona. La ronda automatica que corre al
   // abrir la app no puede reenviar nunca: seria el envio doble que el freno evita.

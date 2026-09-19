@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ClienteForm from './ClienteForm';
 import ClienteFicha from './ClienteFicha';
 import VenderMembresiaForm from './VenderMembresiaForm';
@@ -33,6 +33,13 @@ const LABEL_ESTADO = {
 };
 
 const pesos = (n) => '$' + n.toLocaleString('es-CO');
+
+const MOTIVOS_PAUSA = {
+  ya_pausada: 'Esta membresía ya estaba pausada.',
+  sin_pausa: 'Esta membresía no tenía ninguna pausa abierta.',
+  esta_anulada: 'No se puede pausar una membresía eliminada.',
+  no_existe: 'Esa membresía ya no está.',
+};
 
 function Etiqueta({ estado }) {
   return (
@@ -72,9 +79,19 @@ export default function Clientes({ usuarioActual }) {
   const [cobrandoA, setCobrandoA] = useState(null);
   const [dadosDeBaja, setDadosDeBaja] = useState([]);
   const [verBajas, setVerBajas] = useState(false);
+  const [trabajandoPausa, setTrabajandoPausa] = useState(false);
+  const [avisoPausa, setAvisoPausa] = useState('');
+
+  // Cada tecla lanza una busqueda y las respuestas no tienen por que volver en
+  // orden: la de "ana" podia llegar despues de la de "anab" y dejar en pantalla
+  // los resultados de lo que ya no esta escrito. Se descarta todo lo que no sea
+  // la ultima pedida.
+  const peticionBusqueda = useRef(0);
 
   const buscar = useCallback(async (texto) => {
-    setResultados(await window.api.clientes.buscarConEstado(texto));
+    const mia = ++peticionBusqueda.current;
+    const filas = await window.api.clientes.buscarConEstado(texto);
+    if (mia === peticionBusqueda.current) setResultados(filas);
   }, []);
 
   const recargarLateral = useCallback(async () => {
@@ -126,8 +143,14 @@ export default function Clientes({ usuarioActual }) {
     setCobrandoA(null);
   }
 
+  // Igual que en la ficha: el boton se bloquea mientras guarda. Dos clics
+  // seguidos abrian dos pausas y la membresia se quedaba trabada en 'pausada'.
   async function confirmarPausa(membresiaId) {
-    await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
+    if (trabajandoPausa) return;
+    setTrabajandoPausa(true);
+    const r = await window.api.pausas.pausar({ membresiaId, motivo: motivoPausa, usuarioId: usuarioActual.id });
+    setTrabajandoPausa(false);
+    if (r && r.ok === false) { setAvisoPausa(MOTIVOS_PAUSA[r.motivo] || 'No se pudo pausar: ' + r.motivo); return; }
     cerrarPaneles();
     refrescar();
   }
@@ -149,7 +172,11 @@ export default function Clientes({ usuarioActual }) {
   }
 
   async function reactivar(membresiaId) {
-    await window.api.pausas.reactivar(membresiaId);
+    if (trabajandoPausa) return;
+    setTrabajandoPausa(true);
+    const r = await window.api.pausas.reactivar(membresiaId);
+    setTrabajandoPausa(false);
+    if (r && r.ok === false) setAvisoPausa(MOTIVOS_PAUSA[r.motivo] || 'No se pudo reactivar: ' + r.motivo);
     refrescar();
   }
 
@@ -247,8 +274,8 @@ export default function Clientes({ usuarioActual }) {
                   <button title="Editar" onClick={() => editarCliente(c.id)}>✎</button>
                   {c.membresiaId && (
                     c.estado === 'pausada'
-                      ? <button title="Reactivar" onClick={() => reactivar(c.membresiaId)}>▶</button>
-                      : <button title="Pausar" onClick={() => { cerrarPaneles(); setPausandoId(c.membresiaId); }}>⏸</button>
+                      ? <button title="Reactivar" disabled={trabajandoPausa} onClick={() => reactivar(c.membresiaId)}>▶</button>
+                      : <button title="Pausar" onClick={() => { cerrarPaneles(); setAvisoPausa(''); setPausandoId(c.membresiaId); }}>⏸</button>
                   )}
                   <button title="Vender membresía" onClick={() => { cerrarPaneles(); setVendiendoA(c.id); }}>+</button>
                 </div>
@@ -258,9 +285,15 @@ export default function Clientes({ usuarioActual }) {
                 <div style={{ marginTop: 8, padding: 8, background: 'var(--superficie-alta)', borderRadius: 'var(--radio)' }}>
                   <input placeholder="Motivo de la pausa (opcional)" value={motivoPausa}
                          onChange={e => setMotivoPausa(e.target.value)} />
-                  <button onClick={() => confirmarPausa(c.membresiaId)} style={{ marginLeft: 8 }}>Confirmar pausa</button>
-                  <button onClick={cerrarPaneles} style={{ marginLeft: 8 }}>Cancelar</button>
+                  <button onClick={() => confirmarPausa(c.membresiaId)} disabled={trabajandoPausa} style={{ marginLeft: 8 }}>
+                    {trabajandoPausa ? 'Pausando...' : 'Confirmar pausa'}
+                  </button>
+                  <button onClick={cerrarPaneles} disabled={trabajandoPausa} style={{ marginLeft: 8 }}>Cancelar</button>
                 </div>
+              )}
+
+              {avisoPausa && (pausandoId === c.membresiaId || c.estado === 'pausada') && (
+                <p style={{ color: 'var(--error)', margin: '6px 0 0', fontSize: 13 }}>{avisoPausa}</p>
               )}
 
               {vendiendoA === c.id && (

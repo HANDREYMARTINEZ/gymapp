@@ -99,6 +99,16 @@ app.whenReady().then(async () => {
     check('quedo guardada la nota', cerrada.nota === 'Faltaron 1000');
     check('quedo la marca de cierre', !!cerrada.cerrada_en);
 
+    // En el cajon hay billetes: un monto con centavos dejaba el arqueo pidiendo
+    // contar $66.000,75, que no existe.
+    const conCentavos = repo.abrir({ usuarioId, baseInicial: 1000 });
+    check('se abre una sesion para probar los decimales', conCentavos.ok);
+    check('un movimiento con decimales se rechaza',
+          repo.registrarMovimiento({ tipo: 'ingreso', concepto: 'x', monto: 1000.75, usuarioId }).motivo === 'monto_invalido');
+    check('y el arqueo sigue en pesos enteros',
+          Number.isInteger(repo.resumen(repo.sesionAbierta().id).esperado));
+    repo.cerrar({ efectivoContado: 1000 });
+
     // --- segunda sesion: el arqueo cuadra exacto ---
     const ap2 = repo.abrir({ usuarioId, baseInicial: 20000 });
     check('se puede abrir otra caja despues de cerrar la anterior', ap2.ok);
@@ -114,9 +124,9 @@ app.whenReady().then(async () => {
 
     // --- historial ---
     const sesiones = repo.listarSesiones();
-    check('el historial trae las tres sesiones', sesiones.length === 3, sesiones.length + ' sesiones');
+    check('el historial trae las cuatro sesiones', sesiones.length === 4, sesiones.length + ' sesiones');
     check('el historial viene de la mas reciente a la mas vieja',
-          sesiones[0].id === ap3.id && sesiones[2].id === ap.id);
+          sesiones[0].id === ap3.id && sesiones[3].id === ap.id);
     check('los movimientos quedaron con su sesion, no revueltos',
           repo.resumen(ap.id).movimientos.length === 3 && repo.resumen(ap2.id).movimientos.length === 1);
 

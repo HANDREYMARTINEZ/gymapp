@@ -211,7 +211,20 @@ export default function Usuarios({ usuarioActual }) {
         <tbody>
           {usuarios.map(u => (
             <tr key={u.id} style={{ borderBottom: '1px solid var(--borde-suave)', opacity: u.activo ? 1 : 0.5 }}>
-              <td>{u.nombre}{u.id === usuarioActual.id && <small style={{ color: 'var(--texto-tenue)' }}> (tú)</small>}</td>
+              <td>
+                {u.nombre}{u.id === usuarioActual.id && <small style={{ color: 'var(--texto-tenue)' }}> (tú)</small>}
+                {/* Sin llave propia, a este usuario la app le pedirá la
+                    passphrase de cifrado la primera vez que entre — y esa misma
+                    passphrase abre el panel de desarrollador. Ponerle la
+                    contraseña desde aquí se la crea. */}
+                {u.activo === 1 && u.tieneLlave === false && (
+                  <div style={{ fontSize: 12, color: 'var(--aviso)', maxWidth: 260 }}>
+                    {'⚠'} Todavía no puede entrar solo con su contraseña: pulsa
+                    «Contraseña» y ponle una. Si no, la app le pedirá la passphrase
+                    de cifrado, que no debería salir de ti.
+                  </div>
+                )}
+              </td>
               <td>{u.usuario}</td>
               <td>{ROL_ETIQUETA[u.rol] || u.rol}</td>
               <td>{fecha(u.creado_en)}</td>

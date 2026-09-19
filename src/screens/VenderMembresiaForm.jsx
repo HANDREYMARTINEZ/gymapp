@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
 
+const MOTIVOS = {
+  plan_inactivo: 'Ese plan está desactivado. Actívalo en Planes o elige otro.',
+  fecha_invalida: 'La fecha de inicio no es válida.',
+  descuento_invalido: 'El descuento va de 0 a 100.',
+};
+
 function hoyISO() {
   const d = new Date();
   return [d.getFullYear(),
@@ -24,17 +30,30 @@ export default function VenderMembresiaForm({ clienteId, usuarioActual, onVendid
       setError('Selecciona un plan.');
       return;
     }
+    const pct = parseFloat(descuento) || 0;
+    if (pct < 0 || pct > 100) {
+      setError('El descuento va de 0 a 100.');
+      return;
+    }
+
     setGuardando(true);
-    await window.api.membresias.vender({
+    // Antes no se miraba lo que contestaba: si la venta se rechazaba, el boton
+    // se quedaba en "Vendiendo..." y el mostrador creia que habia vendido.
+    const r = await window.api.membresias.vender({
       clienteId,
       planId: parseInt(planId, 10),
       usuarioId: usuarioActual.id,
-      descuentoPct: parseFloat(descuento) || 0,
+      descuentoPct: pct,
       // Vacio significa "como siempre": empieza cuando termina la anterior del
       // mismo tipo. Solo se manda fecha si el mostrador la eligio a proposito.
       fInicio: fInicio || null,
     });
     setGuardando(false);
+
+    if (!r || r.ok === false) {
+      setError(MOTIVOS[r && r.motivo] || 'No se pudo vender: ' + (r && r.motivo));
+      return;
+    }
     onVendido();
   }
 

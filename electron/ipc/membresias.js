@@ -1,7 +1,18 @@
 const { ipcMain } = require('electron');
 const repo = require('../db/repos/membresias');
 
-ipcMain.handle('membresias:vender', (_evt, datos) => repo.vender(datos));
+// vender() del repo devuelve el id y LANZA cuando algo no cuadra (plan
+// desactivado, fecha rota, descuento imposible). Si ese error sale crudo por el
+// IPC, la promesa de la pantalla se rechaza y el formulario se queda en
+// "Vendiendo..." haciendo creer que la membresia se vendio. Aqui se traduce al
+// mismo { ok, motivo } que contestan renovar() y el resto.
+ipcMain.handle('membresias:vender', (_evt, datos) => {
+  try {
+    return { ok: true, membresiaId: repo.vender(datos || {}) };
+  } catch (e) {
+    return { ok: false, motivo: repo.motivoDeVenta(e) };
+  }
+});
 ipcMain.handle('membresias:anular', (_evt, datos) => repo.anular(datos));
 ipcMain.handle('membresias:renovar', (_evt, datos) => repo.renovar(datos));
 ipcMain.handle('membresias:cambiarFechaInicio', (_evt, datos) => repo.cambiarFechaInicio(datos));

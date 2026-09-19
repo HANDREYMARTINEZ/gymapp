@@ -79,6 +79,25 @@ app.whenReady().then(async () => {
           huellas.cargarTodasLasHuellas().length === 2,
           'cargo ' + huellas.cargarTodasLasHuellas().length);
 
+    // Dar de baja tiene que cerrarle TAMBIEN la puerta de la huella. Hasta el
+    // 18-sep-2026 solo se la cerraba por PIN -- la identificacion filtra por
+    // activo = 1 -- y por huella entraba igual: la plantilla se cargaba en el
+    // lector y la asistencia se registraba (y la puerta se abria).
+    const asistencias = require('../electron/db/repos/asistencias');
+    const antesDeLaBaja = huellas.cargarTodasLasHuellas().length;
+    clientes.darDeBaja({ clienteId: beto, usuarioId: null, motivo: 'prueba' });
+    check('la huella de un cliente dado de baja no se carga en el lector',
+          huellas.cargarTodasLasHuellas().length === antesDeLaBaja - 1,
+          'cargo ' + huellas.cargarTodasLasHuellas().length + ' de ' + antesDeLaBaja);
+    check('y ninguna de las cargadas es suya',
+          !huellas.cargarTodasLasHuellas().some(h => h.clienteId === beto));
+    check('aunque llegue por otro camino, la asistencia se rechaza',
+          asistencias.registrar({ clienteId: beto, metodo: 'huella', registradoPor: null }).motivo === 'cliente_inactivo');
+
+    clientes.reactivar({ clienteId: beto, usuarioId: null });
+    check('al darle de alta otra vez, su huella vuelve al lector',
+          huellas.cargarTodasLasHuellas().some(h => h.clienteId === beto));
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

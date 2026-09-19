@@ -11,9 +11,17 @@ function guardarHuella(clienteId, dedo, templateBuffer) {
   `).run(clienteId, dedo, cifrado, new Date().toISOString());
 }
 
+// Solo las de clientes activos. Antes iban todas, asi que a un cliente dado de
+// baja el kiosco le abria igual con la huella -- por PIN si quedaba fuera,
+// porque la identificacion filtra por activo = 1 -- y las dos puertas del
+// kiosco aplicaban reglas distintas.
 function cargarTodasLasHuellas() {
   const dek = obtenerDekEnMemoria();
-  const filas = getDb().prepare(`SELECT cliente_id, template FROM huellas`).all();
+  const filas = getDb().prepare(`
+    SELECT h.cliente_id, h.template
+    FROM huellas h JOIN clientes c ON c.id = h.cliente_id
+    WHERE c.activo = 1
+  `).all();
   return filas.map(f => ({
     clienteId: f.cliente_id,
     templateBase64: descifrarBuffer(f.template, dek).toString('base64'),
