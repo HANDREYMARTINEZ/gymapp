@@ -17,8 +17,11 @@ resources/dev-private.pem
 # instalador (extraResources), asi que en un clon nuevo hay que compilar el
 # sidecar ANTES de generar el instalador.
 #
-# libs/ NO se ignora: son las DLL del SDK de DigitalPersona a las que apuntan
-# los HintPath del .csproj, y sin ellas el proyecto no compila.
+# libs/ tampoco se versiona: son las DLL del SDK de DigitalPersona a las que
+# apuntan los HintPath del .csproj. Son propietarias y el repositorio es
+# publico, asi que cada quien las copia desde su instalacion del SDK (ver
+# README, "Sidecar de la huella").
+sidecar-huella/libs/
 sidecar-huella/bin/
 sidecar-huella/obj/
 sidecar-huella/packages/

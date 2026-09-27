@@ -160,6 +160,22 @@ dotnet msbuild "EnrollmentSample CS.csproj" -t:Rebuild -p:Configuration=Release
 `bin/Release` es lo que electron-builder copia al instalador vía
 `extraResources`, así que en un clon nuevo ese paso va primero.
 
+#### Sidecar de la huella: las DLL de DigitalPersona
+
+El repositorio **no incluye** las DLL del SDK de DigitalPersona: son software
+propietario de otra empresa. Para compilar el sidecar hay que instalar el
+**DigitalPersona One Touch for Windows SDK** (probado con la 1.6.1) y copiar a
+`sidecar-huella/libs/` estas ocho, que el `.csproj` busca ahí:
+
+```
+DPFPCtlXTypeLibNET.dll   DPFPCtlXWrapperNET.dll   DPFPDevNET.dll
+DPFPEngNET.dll           DPFPGuiNET.dll           DPFPShrNET.dll
+DPFPShrXTypeLibNET.dll   DPFPVerNET.dll
+```
+
+Sin ellas el resto de la app compila y funciona igual; lo único que falta es la
+entrada por huella.
+
 ---
 
 ## Estructura
@@ -201,7 +217,8 @@ conectarla o de subirle el firmware.
 
 Software propietario. Todos los derechos reservados — ver [LICENSE](LICENSE).
 
-Las DLL bajo `sidecar-huella/libs/` pertenecen al SDK de **DigitalPersona** y se
-rigen por su propia licencia; están versionadas porque los `HintPath` del
-`.csproj` apuntan a ellas y sin ellas el proyecto no compila. **Este repositorio
-es privado y no debe hacerse público con esas DLL dentro.**
+El código es visible para consulta, pero eso no da permiso para usarlo,
+copiarlo ni distribuirlo.
+
+Las DLL del SDK de **DigitalPersona** no están en el repositorio (ver
+"Sidecar de la huella" más arriba) y se rigen por su propia licencia.
