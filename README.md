@@ -37,6 +37,64 @@ usuarios, con Argon2.
 
 ---
 
+## Capturas
+
+Todas salen de `npm run capturas`, que siembra una base temporal con **datos de
+ejemplo** (ningún cliente real) y recorre la app de verdad pantalla por pantalla.
+Están todas en [`docs/capturas`](docs/capturas).
+
+### Acceso
+
+| Login | Kiosco |
+|---|---|
+| ![Login](docs/capturas/01-login.png) | ![Kiosco](docs/capturas/02-kiosco.png) |
+
+### Clientes
+
+| Lista de clientes | Ficha del cliente |
+|---|---|
+| ![Clientes](docs/capturas/03-clientes.png) | ![Ficha](docs/capturas/04-cliente-ficha.png) |
+| **Cobrar desde la lista** | **Nuevo cliente** |
+| ![Cobrar](docs/capturas/03b-clientes-cobrar.png) | ![Nuevo cliente](docs/capturas/04b-cliente-nuevo.png) |
+| **Cliente que debe** | **Fiar una membresía** |
+| ![Debe](docs/capturas/04d-ficha-debe.png) | ![Fiar](docs/capturas/04e-ficha-fiar.png) |
+
+### Punto de venta y caja
+
+| Vender | Carrito |
+|---|---|
+| ![Vender](docs/capturas/05-vender.png) | ![Carrito](docs/capturas/06-vender-carrito.png) |
+| **Venta fiada** | **Caja** |
+| ![Fiado](docs/capturas/06b-vender-fiado.png) | ![Caja](docs/capturas/07-caja.png) |
+| **Detalle de una venta** | **Anular una venta** |
+| ![Detalle](docs/capturas/07b-venta-detalle.png) | ![Anular](docs/capturas/07c-venta-anular.png) |
+
+### Planes e inventario
+
+| Planes | Inventario |
+|---|---|
+| ![Planes](docs/capturas/10-planes.png) | ![Inventario](docs/capturas/11-inventario.png) |
+| **Entrada de mercancía** | **Salida de mercancía** |
+| ![Entrada](docs/capturas/12b-inventario-entrada.png) | ![Salida](docs/capturas/12c-inventario-salida.png) |
+
+### Dashboards
+
+| Resumen | Lo más vendido |
+|---|---|
+| ![Dashboards](docs/capturas/13-dashboards.png) | ![Vendido](docs/capturas/14-dashboards-vendido.png) |
+
+### Sistema
+
+| Usuarios | Configuración |
+|---|---|
+| ![Usuarios](docs/capturas/15-usuarios.png) | ![Configuración](docs/capturas/16-configuracion.png) |
+| **Puerta automática** | **Recordatorios por correo** |
+| ![Puerta](docs/capturas/16b-configuracion-puerta.png) | ![Recordatorios](docs/capturas/16d-configuracion-recordatorios.png) |
+| **Panel de desarrollador** | **Borrar planes** |
+| ![Desarrollador](docs/capturas/18-desarrollador.png) | ![Planes](docs/capturas/18b-desarrollador-planes.png) |
+
+---
+
 ## Requisitos
 
 - **Windows 10 o superior.** Electron 44 no arranca en Windows 7: da "no es una
