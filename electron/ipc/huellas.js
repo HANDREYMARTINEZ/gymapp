@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, BrowserWindow } = require('electron');
 const sidecar = require('../services/sidecarHuella');
 const huellasRepo = require('../services/huellas');
 const asistenciasRepo = require('../db/repos/asistencias');
@@ -14,7 +14,8 @@ ipcMain.handle('huellas:enrolar', async (_evt, { clienteId, dedo }) => {
     huellasRepo.guardarHuella(clienteId, dedo, Buffer.from(templateBase64, 'base64'));
     return { ok: true };
   } catch (e) {
-    return { ok: false, motivo: e.message === 'sidecar_ajeno' ? 'sidecar_ajeno' : 'sin_lector' };
+    const conocidos = ['sidecar_ajeno', 'lector_atascado'];
+    return { ok: false, motivo: conocidos.includes(e.message) ? e.message : 'sin_lector' };
   }
 });
 
@@ -47,5 +48,15 @@ ipcMain.handle('kiosco:detenerEscuchaHuella', () => {
   try { sidecar.detenerVerificacion(); } catch (e) {}
   return { ok: true };
 });
+
+// El atasco del lector se reparte a todas las ventanas: lo pinta el kiosco, que
+// es donde se nota, pero no depende de que este abierto en ese momento.
+sidecar.onCambioAtasco((atascado) => {
+  for (const v of BrowserWindow.getAllWindows()) {
+    try { v.webContents.send('huellas:atasco', atascado); } catch (e) { /* ventana cerrandose */ }
+  }
+});
+
+ipcMain.handle('huellas:estaAtascado', () => sidecar.estaAtascado());
 
 module.exports = {};

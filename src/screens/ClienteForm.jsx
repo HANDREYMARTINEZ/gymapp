@@ -98,7 +98,9 @@ export default function ClienteForm({ clienteExistente, onGuardado, onCancelar }
     if (!r || r.ok === false) {
       setMensajeHuella(r && r.motivo === 'sidecar_ajeno'
         ? 'Hay otro programa del lector abierto (por ejemplo desde Visual Studio). Ciérralo y vuelve a intentarlo.'
-        : 'No se pudo leer la huella. Revisa que el lector esté conectado.');
+        : r && r.motivo === 'lector_atascado'
+          ? 'El lector detecta el dedo pero no entrega la huella. Desconectarlo no lo arregla: reinicia el computador.'
+          : 'No se pudo leer la huella. Revisa que el lector esté conectado.');
       return;
     }
     setMensajeHuella('Huella guardada.');

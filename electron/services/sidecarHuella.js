@@ -18,6 +18,30 @@ let resolverEnrolamiento = null;
 let rechazarEnrolamiento = null;
 let onMatchCallback = null;
 
+// El sidecar avisa cuando el lector ve los dedos pero no entrega ninguna huella
+// (paso en el gimnasio el 30-sep-2026: horas sin reconocer a nadie y sin un solo
+// aviso). Aqui solo se guarda el estado y se reparte; quien lo pinta es la pantalla.
+let lectorAtascado = false;
+const oyentesEstado = new Set();
+
+function fijarAtasco(valor) {
+  if (lectorAtascado === valor) return;
+  lectorAtascado = valor;
+  for (const oyente of oyentesEstado) {
+    try { oyente(valor); } catch (e) { /* un oyente roto no tumba a los demas */ }
+  }
+}
+
+function estaAtascado() {
+  return lectorAtascado;
+}
+
+// Devuelve la funcion para dejar de escuchar.
+function onCambioAtasco(oyente) {
+  oyentesEstado.add(oyente);
+  return () => oyentesEstado.delete(oyente);
+}
+
 function estaAbierto() {
   return socket && socket.readyState === 1; // 1 = OPEN
 }
@@ -29,6 +53,9 @@ function estaAbierto() {
 // esperaba la respuesta se quedaba pendiente para siempre.
 function soltar(motivo) {
   socket = null;
+  // Sin conexion no se sabe nada del lector. Si el sidecar se reinicio y sigue
+  // atascado, lo vuelve a decir al reconectar o al siguiente toque.
+  fijarAtasco(false);
   if (rechazarEnrolamiento) {
     const rechazar = rechazarEnrolamiento;
     resolverEnrolamiento = null;
@@ -131,6 +158,23 @@ function manejarMensaje(data) {
     return;
   }
 
+  if (data.evento === 'lectorAtascado') {
+    fijarAtasco(true);
+    // Enrolando no tiene sentido esperar el minuto entero: no va a llegar
+    // ninguna muestra, y "revisa que este conectado" seria mentira.
+    if (rechazarEnrolamiento) {
+      const rechazar = rechazarEnrolamiento;
+      resolverEnrolamiento = null;
+      rechazarEnrolamiento = null;
+      rechazar(new Error('lector_atascado'));
+    }
+    return;
+  }
+  if (data.evento === 'lectorRecuperado') {
+    fijarAtasco(false);
+    return;
+  }
+
   if (data.evento === 'templateListo' && resolverEnrolamiento) {
     const resolver = resolverEnrolamiento;
     resolverEnrolamiento = null;
@@ -182,4 +226,10 @@ function detenerVerificacion() {
   onMatchCallback = null;
 }
 
-module.exports = { conectar, enrolar, iniciarVerificacion, detenerVerificacion, estaAbierto };
+module.exports = {
+  conectar, enrolar, iniciarVerificacion, detenerVerificacion, estaAbierto,
+  estaAtascado, onCambioAtasco,
+  // Solo para test/huellas-atasco.js: simula lo que manda el sidecar sin
+  // necesitar el lector fisico.
+  _manejarMensaje: manejarMensaje,
+};

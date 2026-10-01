@@ -98,6 +98,37 @@ app.whenReady().then(async () => {
     check('al darle de alta otra vez, su huella vuelve al lector',
           huellas.cargarTodasLasHuellas().some(h => h.clienteId === beto));
 
+    // ------------------------------------------------- el lector que se atasca
+    //
+    // 30-sep-2026 en el gimnasio: el lector veia cada dedo pero no entregaba
+    // ninguna huella, y el kiosco paso medio dia sin reconocer a nadie y sin
+    // decirlo. El sidecar lo detecta y lo avisa; aqui se prueba que la app lo
+    // recoge, sin necesitar el lector fisico.
+    const sidecar = require('../electron/services/sidecarHuella');
+    const avisos = [];
+    const dejar = sidecar.onCambioAtasco(v => avisos.push(v));
+    check('arranca sin atasco', sidecar.estaAtascado() === false);
+    sidecar._manejarMensaje({ evento: 'lectorAtascado', toques: 3 });
+    check('el aviso del sidecar marca el lector como atascado', sidecar.estaAtascado() === true);
+    sidecar._manejarMensaje({ evento: 'lectorAtascado', toques: 4 });
+    check('y se reparte una sola vez, no en cada toque',
+          avisos.length === 1 && avisos[0] === true, JSON.stringify(avisos));
+    sidecar._manejarMensaje({ evento: 'lectorRecuperado' });
+    check('cuando vuelve a llegar una huella se quita el aviso',
+          sidecar.estaAtascado() === false && avisos.join() === 'true,false', JSON.stringify(avisos));
+    dejar();
+    sidecar._manejarMensaje({ evento: 'lectorAtascado', toques: 3 });
+    check('quien deja de escuchar ya no recibe nada', avisos.length === 2);
+    sidecar._manejarMensaje({ evento: 'lectorRecuperado' });
+
+    // El que pasaba por el PC del gimnasio sin esta historia leyo "Priority.High es
+    // la clave" en un comentario viejo y recomendo subir la prioridad. High no se
+    // puede ni crear; ver test/sidecar.js.
+    const fuente = fs.readFileSync(path.join(__dirname, '..', 'sidecar-huella', 'SidecarForm.cs'), 'utf-8');
+    check('el sidecar sigue contando toques sin muestra', fuente.includes('TOQUES_PARA_ATASCO'));
+    check('y ningun comentario vuelve a recomendar Priority.High',
+          !/Priority\.High es la clave/.test(fuente));
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

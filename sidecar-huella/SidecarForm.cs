@@ -80,17 +80,16 @@ namespace Enrollment
         {
             try
             {
-                // Priority.High es la clave de todo esto.
+                // La prioridad (ver PrioridadPedida) es la clave de todo esto, y
+                // tiene que ser Low. NO cambiarla a High: High ni siquiera se crea
+                // ("Failed to create acquisition"). Con Normal, la del constructor
+                // sin argumentos que usaba el ejemplo del SDK, el lector solo
+                // entrega las muestras a la ventana que esta en primer plano, y
+                // esta ventana nunca lo esta: el foco lo necesita el kiosco para
+                // el PIN. Low es la de segundo plano.
                 //
-                // Con la prioridad normal (la del constructor sin argumentos, que
-                // es la que usaba el ejemplo del SDK) el lector solo entrega las
-                // muestras a la ventana que esta en primer plano. Por eso el
-                // sidecar oculto veia OnReaderConnect pero nunca OnFingerTouch ni
-                // OnComplete: la ventana existia, pero no tenia el foco.
-                //
-                // Con prioridad alta las entrega aunque la aplicacion este de
-                // fondo, que es exactamente lo que hace falta aqui: el foco lo
-                // necesita el kiosco para el PIN, no nosotros.
+                // Un "el lector toca pero no entrega huellas" NO se arregla
+                // subiendo la prioridad: ver ToquesSinMuestra mas abajo.
                 Anotar("Iniciando captura. Ventana oculta=" + (this.Opacity == 0));
                 Capturer = new DPFP.Capture.Capture(PrioridadPedida);
                 Anotar("Prioridad de captura: " + Capturer.Priority);
@@ -113,7 +112,9 @@ namespace Enrollment
             Servidor = new WebSocketServer("ws://127.0.0.1:" + PUERTO);
             Servidor.Start(socket =>
             {
-                socket.OnOpen = () => { ConexionActiva = socket; };
+                // Si el atasco empezo antes de que la app se conectara (el kiosco
+                // se abre y se cierra muchas veces al dia), se le dice al llegar.
+                socket.OnOpen = () => { ConexionActiva = socket; if (AvisoDeAtasco) socket.Send(JsonAtasco()); };
                 socket.OnClose = () => { ConexionActiva = null; };
                 socket.OnMessage = mensaje => ManejarMensaje(socket, mensaje);
             });
@@ -185,8 +186,35 @@ namespace Enrollment
 
         // --- DPFP.Capture.EventHandler ---
 
+        // --- Deteccion de atasco ---
+        //
+        // Paso en el gimnasio el 30-sep-2026: desde las 12:20 el lector seguia
+        // avisando cada dedo (OnFingerTouch / OnFingerGone) pero ya no entregaba
+        // ninguna muestra (OnComplete). Nadie se entero hasta la noche: el kiosco
+        // simplemente no reconocia a nadie. Desenchufar el lector y reiniciar este
+        // proceso no lo arreglo; reiniciar el PC si.
+        //
+        // En uso normal cada toque termina en un OnComplete (aunque la huella salga
+        // mala: la calidad se juzga despues). Varios toques seguidos sin ninguna
+        // muestra es ese atasco, y se avisa a la app para que lo diga en pantalla.
+        private const int TOQUES_PARA_ATASCO = 3;
+        private int ToquesSinMuestra = 0;
+        private bool AvisoDeAtasco = false;
+
+        private string JsonAtasco()
+        {
+            return "{\"evento\":\"lectorAtascado\",\"toques\":" + ToquesSinMuestra + "}";
+        }
+
         public void OnComplete(object Capture, string ReaderSerialNumber, DPFP.Sample Sample)
         {
+            if (AvisoDeAtasco)
+            {
+                Anotar("RECUPERADO: vuelve a llegar una muestra despues de " + ToquesSinMuestra + " toques sin ninguna.");
+                Enviar("{\"evento\":\"lectorRecuperado\"}");
+            }
+            AvisoDeAtasco = false;
+            ToquesSinMuestra = 0;
             Anotar("OnComplete: llego una muestra. Modo=" + Modo);
             if (Modo == "enrolando") ProcesarEnrolamiento(Sample);
             else if (Modo == "verificando") ProcesarVerificacion(Sample);
@@ -270,7 +298,21 @@ namespace Enrollment
         }
 
         public void OnFingerGone(object Capture, string ReaderSerialNumber) { Anotar("OnFingerGone"); Enviar(JsonEvento("estado", "dedo retirado")); }
-        public void OnFingerTouch(object Capture, string ReaderSerialNumber) { Anotar("OnFingerTouch"); Enviar(JsonEvento("estado", "dedo detectado")); }
+        public void OnFingerTouch(object Capture, string ReaderSerialNumber)
+        {
+            Anotar("OnFingerTouch");
+            Enviar(JsonEvento("estado", "dedo detectado"));
+
+            ToquesSinMuestra++;
+            if (ToquesSinMuestra < TOQUES_PARA_ATASCO) return;
+            // Se anota una sola vez (no una linea por toque durante horas), pero se
+            // avisa en cada toque: es barato y cubre una app que se acaba de conectar.
+            if (!AvisoDeAtasco)
+                Anotar("ATASCO: " + ToquesSinMuestra + " toques seguidos sin ninguna muestra. " +
+                       "El lector ve el dedo pero no entrega la huella.");
+            AvisoDeAtasco = true;
+            Enviar(JsonAtasco());
+        }
         public void OnReaderConnect(object Capture, string ReaderSerialNumber) { Anotar("OnReaderConnect: " + ReaderSerialNumber); Enviar(JsonEvento("estado", "lector conectado")); }
         public void OnReaderDisconnect(object Capture, string ReaderSerialNumber) { Anotar("OnReaderDisconnect"); Enviar(JsonEvento("estado", "lector desconectado")); }
         public void OnSampleQuality(object Capture, string ReaderSerialNumber, DPFP.Capture.CaptureFeedback CaptureFeedback)

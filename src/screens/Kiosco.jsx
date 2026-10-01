@@ -40,6 +40,10 @@ export default function Kiosco() {
   const [resultado, setResultado] = useState(null);
   const [errorCampos, setErrorCampos] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // El lector ve el dedo pero no entrega la huella (ver SidecarForm.cs). Sin
+  // este aviso el kiosco simplemente no reconoce a nadie, y el 30-sep paso medio
+  // dia asi sin que recepcion supiera por que.
+  const [lectorAtascado, setLectorAtascado] = useState(false);
   const pinRef = useRef(null);
   const timeoutRef = useRef(null);
 
@@ -55,6 +59,8 @@ export default function Kiosco() {
       setResultado(data);
       programarLimpieza();
     });
+    window.api.huellas.estaAtascado().then(setLectorAtascado).catch(() => {});
+    const dejarDeVigilar = window.api.huellas.onAtasco(setLectorAtascado);
 
     // Al salir del kiosco se apaga la escucha. Sin esto el lector seguia armado
     // en TODAS las pantallas: un dedo mientras alguien estaba en Caja o en
@@ -63,6 +69,7 @@ export default function Kiosco() {
     // inicio, cada vuelta dejaba ademas otro oyente apilado.
     return () => {
       dejarDeEscuchar();
+      dejarDeVigilar();
       window.api.kiosco.detenerEscuchaHuella().catch(() => {});
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -168,6 +175,17 @@ export default function Kiosco() {
       <p style={{ fontSize: 16, color: 'var(--texto-suave)', margin: '0 0 28px' }}>
         Ingresa tu huella o tu clave de usuario
       </p>
+
+      {lectorAtascado && (
+        <div style={{
+          marginBottom: 20, padding: '10px 14px', fontSize: 15,
+          background: 'var(--aviso-fondo)', border: '1px solid var(--aviso)',
+          borderRadius: 'var(--radio)', color: 'var(--aviso)',
+        }}>
+          {'⚠'} El lector de huella no est&aacute; respondiendo. Marca con tu
+          documento y tu PIN. Recepci&oacute;n: si sigue as&iacute;, reinicia el computador.
+        </div>
+      )}
 
       {bloque}
 

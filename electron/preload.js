@@ -189,6 +189,14 @@ huellas: {
   enrolar: (clienteId, dedo) => ipcRenderer.invoke('huellas:enrolar', { clienteId, dedo }),
   listarPorCliente: (clienteId) => ipcRenderer.invoke('huellas:listarPorCliente', clienteId),
   eliminar: (clienteId, dedo) => ipcRenderer.invoke('huellas:eliminar', clienteId, dedo),
+  // true cuando el lector ve los dedos pero no entrega huellas (ver SidecarForm.cs).
+  estaAtascado: () => ipcRenderer.invoke('huellas:estaAtascado'),
+  // Devuelve la funcion para dejar de escuchar, como kiosco.onHuellaDetectada.
+  onAtasco: (callback) => {
+    const oyente = (_evt, atascado) => callback(atascado);
+    ipcRenderer.on('huellas:atasco', oyente);
+    return () => ipcRenderer.removeListener('huellas:atasco', oyente);
+  },
 },
 
 // Mecanismo unico de imagenes: foto de cliente, imagen de producto y logo del
