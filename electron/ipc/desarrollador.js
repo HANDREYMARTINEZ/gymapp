@@ -2,6 +2,8 @@ const { ipcMain, app } = require('electron');
 const mantenimiento = require('../services/mantenimiento');
 const backupService = require('../services/backup');
 const sesionDev = require('../services/sesionDev');
+const sidecar = require('../services/sidecarHuella');
+const huellaDev = require('../services/huellaDesarrollador');
 const usuariosRepo = require('../db/repos/usuarios');
 const { getDb } = require('../db/connection');
 
@@ -39,6 +41,30 @@ async function respaldoDeSeguridad() {
     return { hecho: false, motivo: e.message };
   }
 }
+
+// La huella del desarrollador: registrarla, cambiarla o quitarla. Solo desde
+// dentro del panel, es decir, despues de haber entrado con la passphrase o con
+// la huella anterior.
+ipcMain.handle('dev:huellaEstado', conPermiso(() => ({ ok: true, ...huellaDev.estado() })));
+
+ipcMain.handle('dev:registrarHuella', conPermiso(async () => {
+  let templateBase64;
+  try {
+    templateBase64 = await sidecar.enrolar(huellaDev.ID_LECTOR);
+  } catch (e) {
+    const conocidos = ['sidecar_ajeno', 'lector_atascado', 'sin_respuesta'];
+    return { ok: false, motivo: conocidos.includes(e.message) ? e.message : 'sin_lector' };
+  }
+  const r = huellaDev.guardar(Buffer.from(templateBase64, 'base64'));
+  if (r.ok) anotarAuditoria('huella_desarrollador_registrada', null);
+  return r;
+}));
+
+ipcMain.handle('dev:borrarHuella', conPermiso(() => {
+  const r = huellaDev.borrar();
+  if (r.borrada) anotarAuditoria('huella_desarrollador_borrada', null);
+  return r;
+}));
 
 ipcMain.handle('dev:diagnostico', conPermiso(() => ({ ok: true, datos: mantenimiento.diagnostico() })));
 

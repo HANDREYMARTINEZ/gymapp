@@ -536,6 +536,15 @@ app.whenReady().then(async () => {
     await esperar(500);
     await capturar('18b-desarrollador-planes');
 
+    // La huella del desarrollador, para entrar con el dedo desde Ctrl+Alt+D.
+    await js(`(() => {
+      const h = [...document.querySelectorAll('main h2')].find(x => x.textContent.trim() === 'Mi huella de desarrollador');
+      if (!h) return false;
+      h.scrollIntoView({ block: 'start' });
+      return true;
+    })()`);
+    await capturar('18c-desarrollador-huella');
+
     const errores = await js('window.__errores');
     if (errores && errores.length) {
       anotar('');

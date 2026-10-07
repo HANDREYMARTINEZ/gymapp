@@ -103,6 +103,96 @@ app.whenReady().then(async () => {
     await handlers['auth:cerrarSesion'](null);
     check('cerrar sesion tambien la cierra', sesionDev.estaActiva() === false);
 
+    // ---- Huella del desarrollador (06-oct-2026) --------------------------
+    // El lector se simula: lo que se prueba es quien abre la puerta y cuando.
+    const sidecar = require('../electron/services/sidecarHuella');
+    const dekMod = require('../electron/crypto/dek');
+    const plantilla = Buffer.from('plantilla-de-prueba-del-dedo-del-desarrollador');
+    const originalEnrolar = sidecar.enrolar;
+    const originalIniciar = sidecar.iniciarVerificacion;
+    let enroladoCon = null;
+    let cargadas = null;
+    let oyenteLector = null;
+    sidecar.enrolar = async (id) => { enroladoCon = id; return plantilla.toString('base64'); };
+    sidecar.iniciarVerificacion = async (templates, cb) => { cargadas = templates; oyenteLector = cb; };
+    const enviados = [];
+    const evtFalso = { sender: { send: (canal, u) => enviados.push({ canal, u }) } };
+    const huellasAntes = contar('huellas');
+
+    check('sin huella registrada el login no la ofrece',
+          (await handlers['auth:huellaDevDisponible'](null)).registrada === false);
+    check('ni se puede armar el lector',
+          (await handlers['auth:escucharHuellaDev'](evtFalso)).motivo === 'sin_huella');
+    check('registrar la huella exige estar dentro del panel',
+          (await handlers['dev:registrarHuella'](null)).motivo === 'sin_sesion_desarrollador');
+
+    await handlers['auth:accesoDesarrollador'](null, PASSPHRASE);
+    const registro = await handlers['dev:registrarHuella'](null);
+    check('dentro del panel se registra', registro.ok === true && enroladoCon === 0, JSON.stringify(registro));
+    const guardada = db.prepare("SELECT valor FROM config WHERE clave = 'huella_desarrollador'").get();
+    check('se guarda cifrada, no la plantilla en claro',
+          !!guardada && !guardada.valor.includes(plantilla.toString('base64')));
+    check('y no va a la tabla de huellas que carga el kiosco', contar('huellas') === huellasAntes);
+    check('queda en auditoria',
+          !!db.prepare("SELECT 1 FROM auditoria WHERE accion = 'huella_desarrollador_registrada'").get());
+
+    await handlers['auth:cerrarSesion'](null);
+    const disp = await handlers['auth:huellaDevDisponible'](null);
+    check('con la base abierta el login la ofrece', disp.registrada === true && disp.abierta === true);
+    const armado = await handlers['auth:escucharHuellaDev'](evtFalso);
+    check('el lector se arma solo con la huella del desarrollador',
+          armado.ok === true && cargadas.length === 1 && cargadas[0].clienteId === 0
+          && cargadas[0].templateBase64 === plantilla.toString('base64'), JSON.stringify(armado));
+
+    await oyenteLector(5);
+    check('el dedo de otro no abre el panel', sesionDev.estaActiva() === false);
+    await oyenteLector(0);
+    check('su huella si lo abre', sesionDev.estaActiva() === true);
+    check('y avisa a la pantalla con el usuario desarrollador',
+          enviados.length === 1 && enviados[0].canal === 'auth:desarrolladorPorHuella' && enviados[0].u.desarrollador === true,
+          JSON.stringify(enviados));
+    const ultimaEntrada = db.prepare(
+      "SELECT detalle FROM auditoria WHERE accion = 'acceso_desarrollador' ORDER BY id DESC LIMIT 1").get();
+    check('la auditoria dice que entro con la huella', ultimaEntrada.detalle === JSON.stringify({ via: 'huella' }),
+          ultimaEntrada.detalle);
+
+    await handlers['auth:cerrarSesion'](null);
+    await oyenteLector(0);
+    check('una vez dentro, la escucha queda apagada', sesionDev.estaActiva() === false);
+
+    await handlers['auth:escucharHuellaDev'](evtFalso);
+    await handlers['auth:detenerHuellaDev'](null);
+    await oyenteLector(0);
+    check('cerrar el recuadro de desarrollador desarma el lector', sesionDev.estaActiva() === false);
+
+    await handlers['auth:escucharHuellaDev'](evtFalso);
+    await handlers['auth:login'](null, 'andrey', 'clave1234');
+    await oyenteLector(0);
+    check('entrar por el login normal tambien lo desarma', sesionDev.estaActiva() === false);
+
+    const dekGuardada = dekMod.obtenerDekEnMemoria();
+    dekMod.guardarDekEnMemoria(null);
+    const enFrio = await handlers['auth:huellaDevDisponible'](null);
+    check('recien abierta la app (sin DEK) dice que la base esta cerrada',
+          enFrio.registrada === true && enFrio.abierta === false);
+    check('y no arma el lector',
+          (await handlers['auth:escucharHuellaDev'](evtFalso)).motivo === 'base_cerrada');
+    const conFrase = await handlers['auth:accesoDesarrollador'](null, PASSPHRASE);
+    check('la passphrase sigue entrando aunque haya huella', conFrase.ok === true && sesionDev.estaActiva() === true);
+    dekMod.guardarDekEnMemoria(dekGuardada);
+    await handlers['auth:cerrarSesion'](null);
+
+    sidecar.iniciarVerificacion = async () => { throw new Error('sin conexion'); };
+    check('sin lector lo dice en vez de quedarse esperando',
+          (await handlers['auth:escucharHuellaDev'](evtFalso)).motivo === 'sin_lector');
+    sidecar.iniciarVerificacion = originalIniciar;
+
+    check('borrarla exige estar dentro', (await handlers['dev:borrarHuella'](null)).motivo === 'sin_sesion_desarrollador');
+    await handlers['auth:accesoDesarrollador'](null, PASSPHRASE);
+    check('dentro se borra', (await handlers['dev:borrarHuella'](null)).borrada === true
+          && (await handlers['auth:huellaDevDisponible'](null)).registrada === false);
+    sidecar.enrolar = originalEnrolar;
+
     await handlers['auth:accesoDesarrollador'](null, PASSPHRASE);
 
     // ---- Diagnostico -----------------------------------------------------

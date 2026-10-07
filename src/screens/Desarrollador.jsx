@@ -46,6 +46,78 @@ function Dato({ etiqueta, children }) {
   );
 }
 
+// Registrar la huella con la que el desarrollador entra desde Ctrl+Alt+D. Va
+// aparte de las de los clientes: el kiosco no la carga, asi que nunca abre la
+// puerta de la calle ni marca asistencia.
+const MOTIVOS_HUELLA = {
+  sin_lector: 'No responde el lector de huella. Revisa que esté conectado.',
+  sin_respuesta: 'Pasó un minuto sin completar la huella. Vuelve a intentarlo.',
+  lector_atascado: 'El lector ve el dedo pero no entrega la huella. Desconéctalo y vuelve a conectarlo.',
+  sidecar_ajeno: 'En el puerto del lector contesta otro programa. Cierra el lector abierto desde Visual Studio.',
+  base_cerrada: 'La base está cerrada; vuelve a entrar.',
+};
+
+function HuellaDesarrollador() {
+  const [estado, setEstado] = useState(null);
+  const [registrando, setRegistrando] = useState(false);
+  const [mensaje, setMensaje] = useState(null);
+
+  async function cargar() {
+    const r = await window.api.desarrollador.huellaEstado();
+    if (r.ok) setEstado(r);
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function registrar() {
+    setRegistrando(true);
+    setMensaje(null);
+    const r = await window.api.desarrollador.registrarHuella();
+    setRegistrando(false);
+    setMensaje(r.ok
+      ? { tipo: 'ok', texto: 'Huella registrada. La próxima vez, Ctrl+Alt+D y pon el dedo.' }
+      : { tipo: 'error', texto: MOTIVOS_HUELLA[r.motivo] || ('No se pudo registrar: ' + r.motivo) });
+    cargar();
+  }
+
+  async function borrar() {
+    const r = await window.api.desarrollador.borrarHuella();
+    setMensaje(r.ok ? { tipo: 'ok', texto: 'Huella borrada. Para entrar queda la passphrase.' }
+                    : { tipo: 'error', texto: 'No se pudo borrar: ' + r.motivo });
+    cargar();
+  }
+
+  return (
+    <section style={{ marginBottom: 36 }}>
+      <h2>Mi huella de desarrollador</h2>
+      <p style={{ maxWidth: 760, color: 'var(--texto-suave)', marginTop: 0 }}>
+        Para entrar con Ctrl+Alt+D poniendo el dedo en vez de escribir la
+        passphrase. Funciona cuando alguien ya entró desde que se abrió la app;
+        recién abierta, y siempre que haga falta, sigue valiendo la passphrase.
+      </p>
+      <div style={caja()}>
+        {estado === null ? 'Cargando...' : (
+          <>
+            {estado.registrada
+              ? <span>Registrada el {formatearFecha(estado.creadaEn)}.</span>
+              : <span>Todavía no hay huella registrada.</span>}
+            <button onClick={registrar} disabled={registrando} style={{ marginLeft: 12 }}>
+              {registrando ? 'Pon el dedo 4 veces en el lector...' : (estado.registrada ? 'Cambiar huella' : 'Registrar huella')}
+            </button>
+            {estado.registrada && !registrando && (
+              <button onClick={borrar} style={{ marginLeft: 8 }}>Borrar</button>
+            )}
+          </>
+        )}
+        {mensaje && (
+          <p style={{ marginBottom: 0, color: mensaje.tipo === 'ok' ? 'var(--exito)' : 'var(--error)' }}>
+            {mensaje.texto}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function Desarrollador() {
   const [diag, setDiag] = useState(null);
   const [zonas, setZonas] = useState([]);
@@ -225,7 +297,7 @@ export default function Desarrollador() {
       <h1>🔧 Desarrollador</h1>
       <p style={{ maxWidth: 760, color: 'var(--texto-suave)', marginTop: 0 }}>
         Esta pantalla no la ve nadie del gimnasio: aparece solo al entrar con
-        Ctrl+Alt+D y la passphrase. Lo que hay aquí <b>borra datos de verdad</b>.
+        Ctrl+Alt+D y la passphrase o la huella del desarrollador. Lo que hay aquí <b>borra datos de verdad</b>.
       </p>
 
       {aviso && (
@@ -553,6 +625,9 @@ export default function Desarrollador() {
           </button>
         </div>
       </section>
+
+      {/* --- Huella del desarrollador -------------------------------------- */}
+      <HuellaDesarrollador />
 
       {/* --- Datos de demo -------------------------------------------------- */}
       <section style={{ marginBottom: 36 }}>

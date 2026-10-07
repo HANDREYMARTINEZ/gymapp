@@ -222,7 +222,11 @@ async function iniciarVerificacion(templates, callbackMatch) {
 // nunca: con la app en Caja o en Configuracion, un dedo en el lector seguia
 // marcando entrada y mandando abrir la calle sin que nadie viera nada en
 // pantalla.
-function detenerVerificacion() {
+//
+// Con un oyente como argumento solo se apaga si sigue siendo ese: la escucha del
+// login de desarrollador no debe desarmar la del kiosco si este ya la reemplazo.
+function detenerVerificacion(soloSi) {
+  if (soloSi && onMatchCallback !== soloSi) return;
   onMatchCallback = null;
 }
 

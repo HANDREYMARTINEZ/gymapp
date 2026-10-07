@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('api', {
     eliminarPlan: (planId) => ipcRenderer.invoke('dev:eliminarPlan', planId),
     auditoria: (filtros) => ipcRenderer.invoke('dev:auditoria', filtros),
     sembrarDemo: () => ipcRenderer.invoke('dev:sembrarDemo'),
+    huellaEstado: () => ipcRenderer.invoke('dev:huellaEstado'),
+    registrarHuella: () => ipcRenderer.invoke('dev:registrarHuella'),
+    borrarHuella: () => ipcRenderer.invoke('dev:borrarHuella'),
   },
 
   // Recordatorios de vencimiento por correo.
@@ -69,6 +72,16 @@ contextBridge.exposeInMainWorld('api', {
   cerrarSesion: () => ipcRenderer.invoke('auth:cerrarSesion'),
   vincularPassphrase: (datos) => ipcRenderer.invoke('auth:vincularPassphrase', datos),
   accesoDesarrollador: (passphrase) => ipcRenderer.invoke('auth:accesoDesarrollador', passphrase),
+  // Entrar como desarrollador con la huella: se arma, y si el dedo coincide el
+  // proceso principal abre el panel y avisa por onDesarrolladorPorHuella.
+  huellaDevDisponible: () => ipcRenderer.invoke('auth:huellaDevDisponible'),
+  escucharHuellaDev: () => ipcRenderer.invoke('auth:escucharHuellaDev'),
+  detenerHuellaDev: () => ipcRenderer.invoke('auth:detenerHuellaDev'),
+  onDesarrolladorPorHuella: (cb) => {
+    const oyente = (_evt, usuario) => cb(usuario);
+    ipcRenderer.on('auth:desarrolladorPorHuella', oyente);
+    return () => ipcRenderer.removeListener('auth:desarrolladorPorHuella', oyente);
+  },
   estaAbierto: () => ipcRenderer.invoke('auth:estaAbierto'),
 },
 
