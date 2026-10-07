@@ -191,6 +191,16 @@ function DetalleSesion({ sesionId }) {
 
   return (
     <>
+      {(detalle.porMedio || []).length > 0 && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+          {detalle.porMedio.map(f => (
+            <span key={f.medio} style={{ fontSize: 13 }}>
+              {f.medio}: <b>{pesos(f.neto)}</b>
+            </span>
+          ))}
+          <span style={{ fontSize: 13 }}>Total cobrado: <b>{pesos(detalle.totalCobrado)}</b></span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
         {detalle.porOrigen.map(o => (
           <span key={o.origen} style={{ fontSize: 13 }}>
@@ -206,8 +216,10 @@ function DetalleSesion({ sesionId }) {
               <td style={{ width: 70 }}>{soloHora(m.fecha)}</td>
               <td style={{ width: 100 }}><EtiquetaOrigen origen={m.origen} /></td>
               <td>{m.concepto}</td>
+              <td>{m.metodo || 'Efectivo'}</td>
               <td>{m.usuario_nombre || '—'}</td>
-              <td style={{ textAlign: 'right', color: m.tipo === 'egreso' ? 'var(--error)' : 'var(--exito)' }}>
+              <td style={{ textAlign: 'right', opacity: esEfectivoMov(m) ? 1 : 0.7,
+                           color: m.tipo === 'egreso' ? 'var(--error)' : 'var(--exito)' }}>
                 {m.tipo === 'egreso' ? '− ' : '+ '}{pesos(m.monto)}
               </td>
             </tr>
@@ -216,6 +228,56 @@ function DetalleSesion({ sesionId }) {
       </table>
     </>
   );
+}
+
+// Lo cobrado en una caja por cada medio de pago: "tanto en efectivo, tanto por
+// Llave, tanto por QR". Lo pidio el gimnasio para mirarlo al cerrar, porque lo
+// que no es efectivo no se cuenta en el cajon y hasta la 1.0.2 ni se anotaba.
+// El efectivo va primero y marcado: es el unico que tiene que estar en el cajon.
+function CuadroMedios({ porMedio, totalCobrado, titulo = 'Cobrado en esta caja' }) {
+  const filas = porMedio || [];
+  const conEfectivo = filas.some(f => f.enCajon)
+    ? filas
+    : [{ medio: 'Efectivo', neto: 0, egresos: 0, enCajon: true }, ...filas];
+  return (
+    <div style={{
+      border: '1px solid var(--borde-fuerte)', padding: 16, minWidth: 260, flex: '0 1 320px',
+      alignSelf: 'flex-start',
+    }}>
+      <h3 style={{ marginTop: 0, marginBottom: 8 }}>{titulo}</h3>
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <tbody>
+          {conEfectivo.map(f => (
+            <tr key={f.medio} style={{ borderBottom: '1px solid var(--borde-suave)' }}>
+              <td style={{ padding: '4px 0' }}>
+                {f.medio}
+                {f.enCajon && <><br /><small style={{ color: 'var(--texto-tenue)' }}>va al cajón</small></>}
+                {f.egresos > 0 && (
+                  <><br /><small style={{ color: 'var(--texto-tenue)' }}>{pesos(f.egresos)} anulados</small></>
+                )}
+              </td>
+              <td style={{ textAlign: 'right', paddingLeft: 16 }}><b>{pesos(f.neto)}</b></td>
+            </tr>
+          ))}
+          <tr style={{ borderTop: '2px solid var(--borde-fuerte)' }}>
+            <td style={{ paddingTop: 6 }}><b>Total cobrado</b></td>
+            <td style={{ textAlign: 'right', paddingLeft: 16, paddingTop: 6, fontSize: 18 }}>
+              <b>{pesos(totalCobrado)}</b>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <small style={{ color: 'var(--texto-tenue)' }}>
+        Solo el efectivo se cuenta en el cajón; lo demás está en la cuenta o el datáfono.
+      </small>
+    </div>
+  );
+}
+
+// Un movimiento que no es en efectivo esta en la caja pero no en el cajon: se
+// pinta tenue para que nadie lo busque entre los billetes.
+function esEfectivoMov(m) {
+  return String(m.metodo || 'Efectivo').trim().toLowerCase() === 'efectivo';
 }
 
 function Diferencia({ valor }) {
@@ -459,6 +521,12 @@ export default function Caja({ usuarioActual }) {
         <div style={{ border: '1px solid var(--exito)', padding: 12, marginBottom: 20, maxWidth: 560 }}>
           Caja cerrada. Esperado {pesos(ultimoCierre.esperado)}, contado{' '}
           {pesos(ultimoCierre.efectivoContado)}. <Diferencia valor={ultimoCierre.diferencia} />
+          {(ultimoCierre.porMedio || []).length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 13 }}>
+              Cobrado: {ultimoCierre.porMedio.map(f => f.medio + ' ' + pesos(f.neto)).join(' · ')}
+              {' '}— total <b>{pesos(ultimoCierre.totalCobrado)}</b>
+            </div>
+          )}
         </div>
       )}
 
@@ -466,17 +534,19 @@ export default function Caja({ usuarioActual }) {
 
       {sesion && resumen && (
         <>
-          <div style={{ border: '1px solid var(--borde-fuerte)', padding: 16, maxWidth: 560 }}>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 400px', maxWidth: 560 }}>
+          <div style={{ border: '1px solid var(--borde-fuerte)', padding: 16 }}>
             <p style={{ marginTop: 0 }}>
               Abierta por <b>{sesion.usuario_nombre}</b> el {fechaHora(sesion.abierta_en)}
             </p>
             <table>
               <tbody>
                 <tr><td>Base inicial</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>{pesos(sesion.base_inicial)}</td></tr>
-                <tr><td>Ingresos</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>+ {pesos(resumen.ingresos)}</td></tr>
-                <tr><td>Egresos</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>− {pesos(resumen.egresos)}</td></tr>
+                <tr><td>Ingresos en efectivo</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>+ {pesos(resumen.ingresos)}</td></tr>
+                <tr><td>Egresos en efectivo</td><td style={{ textAlign: 'right', paddingLeft: 20 }}>− {pesos(resumen.egresos)}</td></tr>
                 <tr style={{ borderTop: '1px solid var(--borde-fuerte)' }}>
-                  <td><b>Debería haber</b></td>
+                  <td><b>Debería haber en el cajón</b></td>
                   <td style={{ textAlign: 'right', paddingLeft: 20 }}><b>{pesos(resumen.esperado)}</b></td>
                 </tr>
               </tbody>
@@ -491,6 +561,9 @@ export default function Caja({ usuarioActual }) {
                           onCerrada={(r) => { setCerrando(false); setUltimoCierre(r); cargar(); }}
                           onCancelar={() => setCerrando(false)} />
             : <NuevoMovimiento usuarioActual={usuarioActual} onListo={cargar} />}
+          </div>
+          <CuadroMedios porMedio={resumen.porMedio} totalCobrado={resumen.totalCobrado} />
+          </div>
 
           <h3 style={{ marginTop: 24, marginBottom: 8 }}>De dónde salió el dinero del cajón</h3>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -517,7 +590,7 @@ export default function Caja({ usuarioActual }) {
           <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 720 }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--borde-fuerte)' }}>
-                <th>Hora</th><th>Origen</th><th>Concepto</th><th>Quién</th><th style={{ textAlign: 'right' }}>Monto</th>
+                <th>Hora</th><th>Origen</th><th>Concepto</th><th>Medio</th><th>Quién</th><th style={{ textAlign: 'right' }}>Monto</th>
               </tr>
             </thead>
             <tbody>
@@ -526,14 +599,19 @@ export default function Caja({ usuarioActual }) {
                   <td>{soloHora(m.fecha)}</td>
                   <td><EtiquetaOrigen origen={m.origen} /></td>
                   <td>{m.concepto}</td>
+                  <td>
+                    {m.metodo || 'Efectivo'}
+                    {!esEfectivoMov(m) && <><br /><small style={{ color: 'var(--texto-tenue)' }}>no va al cajón</small></>}
+                  </td>
                   <td>{m.usuario_nombre || '—'}</td>
-                  <td style={{ textAlign: 'right', color: m.tipo === 'egreso' ? 'var(--error)' : 'var(--exito)' }}>
+                  <td style={{ textAlign: 'right', opacity: esEfectivoMov(m) ? 1 : 0.7,
+                               color: m.tipo === 'egreso' ? 'var(--error)' : 'var(--exito)' }}>
                     {m.tipo === 'egreso' ? '− ' : '+ '}{pesos(m.monto)}
                   </td>
                 </tr>
               ))}
               {resumen.movimientos.length === 0 && (
-                <tr><td colSpan={5} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
+                <tr><td colSpan={6} style={{ paddingTop: 12, color: 'var(--texto-tenue)' }}>
                   Todavía no hay movimientos en esta caja.
                 </td></tr>
               )}

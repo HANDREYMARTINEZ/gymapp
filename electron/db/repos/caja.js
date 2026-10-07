@@ -4,10 +4,15 @@ const { getDb } = require('../connection');
 // milisegundos y dos escrituras seguidas pueden compartir el mismo instante.
 // Sin el desempate el orden lo decide SQLite y deja de ser reproducible.
 
-// caja_movimientos registra EFECTIVO, no ingresos contables. Una venta con
-// tarjeta no entra al cajon, asi que no genera movimiento: si entrara, el arqueo
-// pediria contar un dinero que nunca estuvo ahi. El POS (3.5) solo enviara aqui
-// lo que se cobre en efectivo.
+// caja_movimientos registra todo lo cobrado mientras la caja esta abierta, con
+// su medio de pago (migracion 013). Antes solo guardaba efectivo, y en el
+// gimnasio lo cobrado por QR, Llave o Nequi "no entraba a la caja". El arqueo,
+// en cambio, sigue contando solo el efectivo: lo demas no esta en el cajon, y
+// pedir contarlo dejaria un faltante falso en cada cierre.
+const { EFECTIVO, esEfectivo, esMedioValido } = require('../../services/medios-pago');
+
+// Para las consultas: el mismo criterio de esEfectivo(), en SQL.
+const SOLO_EFECTIVO = `LOWER(TRIM(metodo)) = LOWER('${EFECTIVO}')`;
 
 function sesionAbierta() {
   return getDb().prepare(`
@@ -39,9 +44,17 @@ function abrir({ usuarioId, baseInicial }) {
 
 const ORIGENES = ['venta', 'membresia', 'manual'];
 
-function registrarMovimiento({ tipo, concepto, monto, usuarioId, origen = 'manual' }) {
+function registrarMovimiento({ tipo, concepto, monto, usuarioId, origen = 'manual', metodo = EFECTIVO }) {
   if (tipo !== 'ingreso' && tipo !== 'egreso') {
     return { ok: false, motivo: 'tipo_invalido' };
+  }
+  if (!esMedioValido(metodo)) {
+    return { ok: false, motivo: 'medio_pago_invalido' };
+  }
+  // Un gasto o una entrada escrita a mano es siempre del cajon: no hay forma de
+  // sacar un domicilio "por Nequi" desde la caja.
+  if (origen === 'manual' && !esEfectivo(metodo)) {
+    return { ok: false, motivo: 'manual_solo_efectivo' };
   }
   // En el cajon hay billetes, no decimales: un monto con centavos dejaba el
   // arqueo pidiendo contar $66.000,75.
@@ -58,10 +71,11 @@ function registrarMovimiento({ tipo, concepto, monto, usuarioId, origen = 'manua
   }
 
   const info = getDb().prepare(`
-    INSERT INTO caja_movimientos (sesion_id, tipo, concepto, monto, fecha, usuario_id, origen)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO caja_movimientos (sesion_id, tipo, concepto, monto, fecha, usuario_id, origen, metodo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(sesion.id, tipo, String(concepto).trim(), monto, new Date().toISOString(), usuarioId,
-         ORIGENES.includes(origen) ? origen : 'manual');
+         ORIGENES.includes(origen) ? origen : 'manual',
+         esEfectivo(metodo) ? EFECTIVO : String(metodo).trim());
 
   return { ok: true, id: info.lastInsertRowid, sesionId: sesion.id };
 }
@@ -91,7 +105,7 @@ function resumen(sesionId) {
     SELECT
       COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
       COALESCE(SUM(CASE WHEN tipo = 'egreso'  THEN monto END), 0) AS egresos
-    FROM caja_movimientos WHERE sesion_id = ?
+    FROM caja_movimientos WHERE sesion_id = ? AND ${SOLO_EFECTIVO}
   `).get(sesionId);
 
   const esperado = sesion.base_inicial + totales.ingresos - totales.egresos;
@@ -103,9 +117,24 @@ function resumen(sesionId) {
     SELECT origen,
            COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
            COALESCE(SUM(CASE WHEN tipo = 'egreso'  THEN monto END), 0) AS egresos
-    FROM caja_movimientos WHERE sesion_id = ?
+    FROM caja_movimientos WHERE sesion_id = ? AND ${SOLO_EFECTIVO}
     GROUP BY origen
   `).all(sesionId);
+
+  // Lo cobrado en esta caja por cada medio: el cuadro que se mira al cerrar
+  // ("tanto en efectivo, tanto por Llave, tanto por QR"). Solo cobros y sus
+  // anulaciones; lo escrito a mano es gasto o base del cajon, no un cobro, y ya
+  // esta en los ingresos y egresos del arqueo.
+  const porMedio = db.prepare(`
+    SELECT metodo AS medio,
+           COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto END), 0) AS ingresos,
+           COALESCE(SUM(CASE WHEN tipo = 'egreso'  THEN monto END), 0) AS egresos
+    FROM caja_movimientos WHERE sesion_id = ? AND origen <> 'manual'
+    GROUP BY metodo
+  `).all(sesionId)
+    .map(f => ({ ...f, neto: f.ingresos - f.egresos, enCajon: esEfectivo(f.medio) }))
+    .sort((a, b) => (b.enCajon - a.enCajon) || (b.neto - a.neto));
+  const totalCobrado = porMedio.reduce((s, f) => s + f.neto, 0);
 
   return {
     sesion,
@@ -113,6 +142,8 @@ function resumen(sesionId) {
     egresos: totales.egresos,
     esperado,
     porOrigen,
+    porMedio,
+    totalCobrado,
     movimientos: listarMovimientos(sesionId),
   };
 }
@@ -127,7 +158,7 @@ function cerrar({ efectivoContado, nota }) {
     return { ok: false, motivo: 'sin_sesion_abierta' };
   }
 
-  const { esperado } = resumen(sesion.id);
+  const { esperado, porMedio, totalCobrado } = resumen(sesion.id);
   // Positiva = sobra dinero, negativa = falta. Se guarda aunque sea cero: que el
   // arqueo cuadre es un hecho que vale la pena poder consultar despues.
   const diferencia = efectivoContado - esperado;
@@ -138,7 +169,7 @@ function cerrar({ efectivoContado, nota }) {
     WHERE id = ?
   `).run(new Date().toISOString(), efectivoContado, diferencia, nota || null, sesion.id);
 
-  return { ok: true, sesionId: sesion.id, esperado, efectivoContado, diferencia };
+  return { ok: true, sesionId: sesion.id, esperado, efectivoContado, diferencia, porMedio, totalCobrado };
 }
 
 function listarSesiones(limite = 30) {

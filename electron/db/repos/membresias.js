@@ -142,11 +142,12 @@ function estadoTickets(membresiaId) {
   };
 }
 
-// Un pago en efectivo es dinero que entra al mismo cajon que las ventas, asi que
-// tiene que aparecer en el arqueo. Si no, todo dia con pagos en efectivo cierra
-// con un sobrante falso y el arqueo deja de servir para detectar errores.
-// Por lo mismo se exige la caja abierta: sin sesion el efectivo no tiene donde
-// quedar registrado, y aceptarlo igual seria romper el arqueo en silencio.
+// Todo pago entra a la caja con su medio. El de efectivo, ademas, cuenta en el
+// arqueo: es dinero que entra al mismo cajon que las ventas. Los demas (QR,
+// Llave, Nequi, tarjeta...) quedan en la caja para el cuadro por medio de pago;
+// antes no se anotaban y en el gimnasio parecia que "no entraban a la caja".
+// Por lo mismo se exige la caja abierta para cualquier medio: sin sesion el pago
+// no tiene donde quedar registrado.
 function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
   // Entero y positivo. Un decimal entraba tal cual en una columna INTEGER y
   // dejaba el arqueo con centavos que nadie puede contar en el cajon.
@@ -177,8 +178,7 @@ function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
     return { ok: false, motivo: 'medio_pago_invalido' };
   }
 
-  const enEfectivo = esEfectivo(metodo);
-  if (enEfectivo && !caja.sesionAbierta()) {
+  if (!caja.sesionAbierta()) {
     return { ok: false, motivo: 'sin_caja_abierta' };
   }
 
@@ -189,18 +189,17 @@ function registrarPago({ membresiaId, monto, metodo, usuarioId, nota }) {
       VALUES (?, ?, ?, ?, ?, ?, 0)
     `).run(membresiaId, monto, metodo, new Date().toISOString(), usuarioId, nota || null);
 
-    if (enEfectivo) {
-      const mov = caja.registrarMovimiento({
-        tipo: 'ingreso',
-        concepto: 'Pago de membresía #' + membresiaId,
-        monto,
-        usuarioId,
-        origen: 'membresia',
-      });
-      // Se lanza para que la transaccion tumbe tambien el pago: un pago sin su
-      // movimiento de caja es exactamente el descuadre que esto evita.
-      if (!mov.ok) throw new Error('caja_rechazo:' + mov.motivo);
-    }
+    const mov = caja.registrarMovimiento({
+      tipo: 'ingreso',
+      concepto: 'Pago de membresía #' + membresiaId,
+      monto,
+      usuarioId,
+      origen: 'membresia',
+      metodo,
+    });
+    // Se lanza para que la transaccion tumbe tambien el pago: un pago sin su
+    // movimiento de caja es exactamente el descuadre que esto evita.
+    if (!mov.ok) throw new Error('caja_rechazo:' + mov.motivo);
   });
 
   try {

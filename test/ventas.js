@@ -53,13 +53,30 @@ app.whenReady().then(async () => {
     check('el bloqueo NO descuenta stock', productos.obtenerPorId(agua).stock === 10,
           'stock=' + productos.obtenerPorId(agua).stock);
 
-    // --- tarjeta sin caja abierta si pasa ---
-    const conTarjeta = ventas.registrar({ items: [{ productoId: agua, cantidad: 1 }], metodoPago: 'Tarjeta', usuarioId });
-    check('la venta con tarjeta si pasa sin caja abierta', conTarjeta.ok, 'motivo=' + conTarjeta.motivo);
-    check('la venta con tarjeta si descuenta stock', productos.obtenerPorId(agua).stock === 9);
+    // --- tarjeta sin caja abierta tambien se bloquea ---
+    // Desde la 1.0.3 todo cobro entra a la caja con su medio (el gimnasio veia
+    // que lo de QR, Llave o Nequi "no entraba a la caja"). Sin caja abierta no
+    // tiene donde anotarse, igual que el efectivo.
+    const tarjetaSinCaja = ventas.registrar({ items: [{ productoId: agua, cantidad: 1 }], metodoPago: 'Tarjeta', usuarioId });
+    check('la venta con tarjeta sin caja abierta tambien se bloquea',
+          !tarjetaSinCaja.ok && tarjetaSinCaja.motivo === 'sin_caja_abierta', 'motivo=' + tarjetaSinCaja.motivo);
+    check('y tampoco descuenta stock', productos.obtenerPorId(agua).stock === 10);
 
     // --- se abre la caja ---
     caja.abrir({ usuarioId, baseInicial: 20000 });
+
+    const conTarjeta = ventas.registrar({ items: [{ productoId: agua, cantidad: 1 }], metodoPago: 'Tarjeta', usuarioId });
+    check('con caja abierta la venta con tarjeta pasa', conTarjeta.ok, 'motivo=' + conTarjeta.motivo);
+    check('la venta con tarjeta si descuenta stock', productos.obtenerPorId(agua).stock === 9);
+    const conTarjetaCaja = caja.resumen(caja.sesionAbierta().id);
+    check('la venta con tarjeta entra a la caja con su medio',
+          conTarjetaCaja.movimientos.some(m => m.concepto === 'Venta #' + conTarjeta.ventaId && m.metodo === 'Tarjeta'),
+          JSON.stringify(conTarjetaCaja.movimientos));
+    check('pero no al arqueo: el cajon no tiene ese dinero',
+          conTarjetaCaja.ingresos === 0 && conTarjetaCaja.esperado === 20000, 'esperado=' + conTarjetaCaja.esperado);
+    check('y sale en el cuadro por medio de pago',
+          conTarjetaCaja.porMedio.some(f => f.medio === 'Tarjeta' && f.neto === 3000) && conTarjetaCaja.totalCobrado === 3000,
+          JSON.stringify(conTarjetaCaja.porMedio));
 
     const v = ventas.registrar({
       items: [{ productoId: agua, cantidad: 2 }, { productoId: barra, cantidad: 1 }],

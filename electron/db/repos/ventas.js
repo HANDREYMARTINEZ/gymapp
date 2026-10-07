@@ -69,8 +69,9 @@ function registrar({ items, metodoPago, usuarioId, clienteId, fiadoHasta }) {
     }
   }
 
-  // Lo fiado no entra al cajon hoy: entra cuando se cobre (abonar).
-  const enEfectivo = esEfectivo(metodoPago);
+  // Lo fiado no entra a la caja hoy: entra cuando se cobre (abonar). Todo lo
+  // demas entra con su medio; solo el efectivo cuenta para el arqueo.
+  const aCaja = !fiado;
 
   const tx = db.transaction(() => {
     const fecha = new Date().toISOString();
@@ -120,10 +121,10 @@ function registrar({ items, metodoPago, usuarioId, clienteId, fiadoHasta }) {
       if (fuera) totalFuera += importe; else totalDentro += importe;
     }
 
-    // Solo se exige caja abierta si hay efectivo que meter en el cajon. Un ticket
-    // entero de cosas de fuera no toca la caja del gimnasio, asi que pedirle una
-    // sesion abierta seria bloquear una venta por un arqueo que no le incumbe.
-    if (enEfectivo && totalDentro > 0 && !caja.sesionAbierta()) {
+    // Solo se exige caja abierta si hay algo del gimnasio que anotar en ella. Un
+    // ticket entero de cosas de fuera no toca la caja del gimnasio, asi que
+    // pedirle una sesion abierta seria bloquear una venta que no le incumbe.
+    if (aCaja && totalDentro > 0 && !caja.sesionAbierta()) {
       throw new VentaRechazada('sin_caja_abierta');
     }
 
@@ -141,15 +142,16 @@ function registrar({ items, metodoPago, usuarioId, clienteId, fiadoHasta }) {
       insertarItem.run(ventaId, d.productoId, d.nombre, d.cantidad, d.pUnitario, d.pCostoUnit, d.fuera);
     }
 
-    // Al cajon entra solo la parte del gimnasio. Meter el total completo seria
+    // A la caja entra solo la parte del gimnasio. Meter el total completo seria
     // exactamente el sobrante falso que este reparto viene a evitar.
-    if (enEfectivo && totalDentro > 0) {
+    if (aCaja && totalDentro > 0) {
       const mov = caja.registrarMovimiento({
         tipo: 'ingreso',
         concepto: 'Venta #' + ventaId,
         monto: totalDentro,
         usuarioId,
         origen: 'venta',
+        metodo: metodoPago,
       });
       // Si la caja rechaza, cae toda la venta: el stock descontado y la venta sin
       // su ingreso serian dos descuadres a la vez.
@@ -232,22 +234,26 @@ function abonarSinAtrapar({ ventaId, monto, metodo, usuarioId, nota }) {
   const reparto = repartoDe(ventaId);
   const dentroPendiente = Math.max(0, reparto.dentro - estado.abonadoDentro);
   const dentro = Math.min(n, dentroPendiente);
-  const alCajon = esEfectivo(metodo) && dentro > 0;
+  // Todo cobro del gimnasio entra a la caja con su medio; alCajon dice solo
+  // cuanto de eso es efectivo, que es lo que se devuelve al anular.
+  const aCaja = dentro > 0;
+  const alCajon = esEfectivo(metodo) && aCaja;
 
-  if (alCajon && !caja.sesionAbierta()) throw new AbonoRechazado('sin_caja_abierta');
+  if (aCaja && !caja.sesionAbierta()) throw new AbonoRechazado('sin_caja_abierta');
 
   const info = db.prepare(`
     INSERT INTO venta_abonos (venta_id, monto, dentro, metodo, fecha, usuario_id, nota, anulada)
     VALUES (?, ?, ?, ?, ?, ?, ?, 0)
   `).run(ventaId, n, dentro, metodo, new Date().toISOString(), usuarioId || null, nota || null);
 
-  if (alCajon) {
+  if (aCaja) {
     const mov = caja.registrarMovimiento({
       tipo: 'ingreso',
       concepto: 'Cobro de fiado, venta #' + ventaId,
       monto: dentro,
       usuarioId,
       origen: 'venta',
+      metodo,
     });
     if (!mov.ok) throw new AbonoRechazado(mov.motivo);
   }
@@ -461,6 +467,23 @@ function anular({ ventaId, usuarioId, motivo }) {
     return { ok: false, motivo: 'sin_caja_abierta' };
   }
 
+  // Lo cobrado por otros medios tambien entro a la caja, asi que tambien sale:
+  // si no, el cuadro por medio de pago seguiria contando una venta anulada. No
+  // se exige caja abierta para esto: no hay billetes que sacar del cajon, y sin
+  // sesion no hay cuadro que corregir.
+  const otrosMedios = new Map();
+  const sumarMedio = (metodo, monto) => {
+    if (esEfectivo(metodo) || monto <= 0) return;
+    otrosMedios.set(metodo, (otrosMedios.get(metodo) || 0) + monto);
+  };
+  if (fiada) {
+    db.prepare(`SELECT dentro, metodo FROM venta_abonos WHERE venta_id = ? AND anulada = 0`).all(ventaId)
+      .forEach(a => sumarMedio(a.metodo, a.dentro));
+  } else {
+    sumarMedio(venta.metodo_pago, reparto.dentro);
+  }
+  const hayCaja = !!caja.sesionAbierta();
+
   const tx = db.transaction(() => {
     const items = db.prepare(`SELECT * FROM venta_items WHERE venta_id = ?`).all(ventaId);
     for (const item of items) {
@@ -491,6 +514,20 @@ function anular({ ventaId, usuarioId, motivo }) {
         origen: 'venta',
       });
       if (!mov.ok) throw new VentaRechazada(mov.motivo);
+    }
+
+    if (hayCaja) {
+      for (const [metodo, monto] of otrosMedios) {
+        const mov = caja.registrarMovimiento({
+          tipo: 'egreso',
+          concepto: 'Anulación de venta #' + ventaId,
+          monto,
+          usuarioId,
+          origen: 'venta',
+          metodo,
+        });
+        if (!mov.ok) throw new VentaRechazada(mov.motivo);
+      }
     }
 
     return { ok: true, ventaId, devuelto: aDevolver, fueraDeCaja: reparto.fuera };

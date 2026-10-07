@@ -67,7 +67,7 @@ export default function RegistrarPagoForm({ membresiaId, fInicioActual, saldo, f
     if (r && r.ok === false) {
       setGuardando(false);
       const textos = {
-        sin_caja_abierta: 'No hay una caja abierta. Un pago en efectivo entra al cajón, así que abre la caja primero.',
+        sin_caja_abierta: 'No hay una caja abierta. Todo pago entra a la caja (efectivo, QR, Llave, tarjeta...), así que abre la caja primero.',
         medio_pago_invalido: 'Elige un medio de pago válido.',
         // El freno nuevo: un cero de más dejaba el saldo en negativo y la caja
         // esperando un dinero que no entró.

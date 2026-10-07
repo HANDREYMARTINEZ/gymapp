@@ -5,7 +5,7 @@ import { useCodigoEscaneado } from '../lector/lector';
 const pesos = (n) => '$' + (n || 0).toLocaleString('es-CO');
 
 const MOTIVOS = {
-  sin_caja_abierta: 'No hay una caja abierta. Una venta en efectivo entra al cajón, así que abre la caja primero (o cobra con otro medio).',
+  sin_caja_abierta: 'No hay una caja abierta. Toda venta del gimnasio entra a la caja (efectivo, QR, Llave, tarjeta...), así que abre la caja primero.',
   stock_insuficiente: 'No hay existencias suficientes.',
   producto_inactivo: 'Ese producto está inactivo.',
   producto_no_existe: 'Ese producto ya no existe.',
@@ -196,9 +196,10 @@ export default function POS({ usuarioActual }) {
   const total = carrito.reduce((s, l) => s + l.pUnitario * l.cantidad, 0);
   const totalFuera = carrito.filter(l => l.fueraDeCaja).reduce((s, l) => s + l.pUnitario * l.cantidad, 0);
   const totalDentro = total - totalFuera;
-  // Un ticket entero de cosas de fuera no toca el cajon del gimnasio, asi que no
-  // hay por que exigirle una caja abierta.
-  const necesitaCaja = metodoPago === 'Efectivo' && !cajaAbierta && totalDentro > 0;
+  // Toda venta del gimnasio entra a la caja con su medio de pago, sea efectivo o
+  // no. Un ticket entero de cosas de fuera no la toca, y lo fiado entra cuando se
+  // cobre: a esos dos no hay por que exigirles una caja abierta.
+  const necesitaCaja = !esFiado && !cajaAbierta && totalDentro > 0;
 
   return (
     <div>
@@ -206,8 +207,8 @@ export default function POS({ usuarioActual }) {
 
       {!cajaAbierta && (
         <p style={{ border: '1px solid var(--aviso)', background: 'var(--aviso-fondo)', padding: 10, maxWidth: 720 }}>
-          No hay caja abierta. Puedes cobrar con tarjeta o transferencia, y también
-          en efectivo lo que sea <b>fuera de caja</b>; para el efectivo del gimnasio
+          No hay caja abierta. Solo puedes cobrar lo que sea <b>fuera de caja</b> o
+          fiar; para cobrar lo del gimnasio (en efectivo, QR, Llave, tarjeta...)
           ábrela desde <b>Caja</b>.
         </p>
       )}
@@ -372,7 +373,7 @@ export default function POS({ usuarioActual }) {
           </button>
           {necesitaCaja && (
             <small style={{ color: 'var(--error)' }}>
-              Hay {pesos(totalDentro)} del gimnasio en este ticket. Abre la caja para cobrarlo en efectivo.
+              Hay {pesos(totalDentro)} del gimnasio en este ticket. Abre la caja para cobrarlo.
             </small>
           )}
           {carrito.length > 0 && (

@@ -1,6 +1,6 @@
 {
   "name": "gymapp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Administracion de gimnasio: clientes, membresias, asistencias, punto de venta, inventario y caja.",
   "main": "electron/main.js",
   "scripts": {

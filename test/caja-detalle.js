@@ -148,6 +148,63 @@ app.whenReady().then(async () => {
     check('y la anterior conserva los suyos',
           caja.resumen(sesionId).movimientos.length === detalle.movimientos.length);
 
+    // --------------------- todo medio de pago entra a la caja (1.0.3)
+    // En el gimnasio lo cobrado por QR, Llave o Nequi "no entraba a la caja". Ahora
+    // entra con su medio y sale en el cuadro por medio de pago; el arqueo sigue
+    // contando solo el efectivo.
+    check('la caja de antes ya trae su cuadro: Nequi y tarjeta dentro',
+          detalle.porMedio.some(f => f.medio === 'Nequi' && f.neto === 15000)
+          && detalle.porMedio.some(f => f.medio === 'Tarjeta' && f.neto === 50000),
+          JSON.stringify(detalle.porMedio));
+    check('y el efectivo neto de cobros (sin lo manual)',
+          detalle.porMedio.some(f => f.medio === 'Efectivo' && f.neto === 3000 + 70000),
+          JSON.stringify(detalle.porMedio));
+    check('el total cobrado es la suma de los medios',
+          detalle.totalCobrado === 15000 + 50000 + 73000, 'total=' + detalle.totalCobrado);
+
+    const sesion3 = caja.sesionAbierta().id;
+    const carla = clientes.crear({ documento: '333', nombre: 'Carla', telefono: '302' });
+    const mCarla = membresias.vender({ clienteId: carla, planId: mensual, usuarioId });
+    check('un pago por Llave entra', membresias.registrarPago({ membresiaId: mCarla, monto: 40000, metodo: 'Llave', usuarioId }).ok);
+    check('uno por QR tambien', membresias.registrarPago({ membresiaId: mCarla, monto: 20000, metodo: 'QR', usuarioId }).ok);
+    const vQr = ventas.registrar({ items: [{ productoId: agua, cantidad: 2 }], metodoPago: 'QR', usuarioId });
+    ventas.registrar({ items: [{ productoId: agua, cantidad: 1 }], metodoPago: 'Efectivo', usuarioId });
+
+    const r3 = caja.resumen(sesion3);
+    const neto = (m) => (r3.porMedio.find(f => f.medio === m) || { neto: 0 }).neto;
+    check('el cuadro separa Llave, QR y efectivo',
+          neto('Llave') === 40000 && neto('QR') === 20000 + 6000 && neto('Efectivo') === 3000,
+          JSON.stringify(r3.porMedio));
+    check('el efectivo va primero en el cuadro', r3.porMedio[0].medio === 'Efectivo');
+    check('el arqueo solo espera el efectivo',
+          r3.esperado === 50000 + 3000 && r3.ingresos === 3000, 'esperado=' + r3.esperado);
+    check('cada movimiento dice su medio',
+          r3.movimientos.filter(m => m.metodo === 'Llave').length === 1
+          && r3.movimientos.filter(m => m.metodo === 'QR').length === 2);
+
+    ventas.anular({ ventaId: vQr.ventaId, usuarioId, motivo: 'error' });
+    const r4 = caja.resumen(sesion3);
+    const qr4 = r4.porMedio.find(f => f.medio === 'QR');
+    check('anular una venta por QR la saca del cuadro',
+          qr4.neto === 20000 && qr4.egresos === 6000, JSON.stringify(qr4));
+    check('sin tocar el arqueo', r4.esperado === r3.esperado);
+
+    check('un movimiento manual no puede ser por QR',
+          caja.registrarMovimiento({ tipo: 'egreso', concepto: 'x', monto: 1000, usuarioId, metodo: 'QR' }).motivo === 'manual_solo_efectivo');
+    check('ni con un medio inventado',
+          caja.registrarMovimiento({ tipo: 'ingreso', concepto: 'x', monto: 1000, usuarioId, origen: 'venta', metodo: 'Bitcoin' }).motivo === 'medio_pago_invalido');
+
+    const cierre3 = caja.cerrar({ efectivoContado: r4.esperado });
+    check('al cerrar devuelve el cuadro por medio',
+          cierre3.ok && cierre3.diferencia === 0 && cierre3.totalCobrado === 40000 + 20000 + 3000
+          && cierre3.porMedio.length === 3, JSON.stringify(cierre3));
+
+    const mDiego = membresias.vender({ clienteId: carla, planId: mensual, usuarioId });
+    const llaveSinCaja = membresias.registrarPago({ membresiaId: mDiego, monto: 1000, metodo: 'Llave', usuarioId });
+    check('sin caja abierta un pago por Llave se rechaza',
+          !llaveSinCaja.ok && llaveSinCaja.motivo === 'sin_caja_abierta', JSON.stringify(llaveSinCaja));
+    check('y no deja el pago guardado', membresias.listarPagos(mDiego).length === 0);
+
     db.close();
   } catch (e) {
     log('EXCEPCION -> ' + e.stack);

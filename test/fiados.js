@@ -205,6 +205,13 @@ app.whenReady().then(async () => {
     check('y no queda NADA aplicado a medias',
           db.prepare('SELECT COUNT(*) AS n FROM pagos').get().n === pagosAntes
           && db.prepare('SELECT COUNT(*) AS n FROM venta_abonos').get().n === abonosAntes);
+    // Desde la 1.0.3 tampoco por QR: todo cobro entra a la caja con su medio.
+    const qrSinCaja = fiados.cobrar({ clienteId: ana, monto: 3000, metodo: 'QR', usuarioId });
+    check('cobrar por QR sin caja tambien se rechaza', !qrSinCaja.ok && qrSinCaja.motivo === 'sin_caja_abierta',
+          JSON.stringify(qrSinCaja));
+
+    caja.abrir({ usuarioId, baseInicial: 0 });
+    const sesion2 = caja.sesionAbierta().id;
 
     // El caso feo: la primera parte (la membresia) SI se aplica y la segunda (la
     // venta) revienta. Se simula rompiendo el abono a proposito.
@@ -222,9 +229,9 @@ app.whenReady().then(async () => {
           parcial.ok && parcial.aplicado.length === 1 && parcial.aplicado[0].tipo === 'membresia' && parcial.debeTodavia === 70000,
           JSON.stringify(parcial));
     check('como un pago de membresia de verdad', membresias.listarPagos(mAna).some(p => p.monto === 3000 && p.metodo === 'QR'));
-
-    caja.abrir({ usuarioId, baseInicial: 0 });
-    const sesion2 = caja.sesionAbierta().id;
+    check('que entra a la caja como QR, fuera del arqueo',
+          caja.resumen(sesion2).porMedio.some(f => f.medio === 'QR' && f.neto === 3000) && caja.resumen(sesion2).esperado === 0,
+          JSON.stringify(caja.resumen(sesion2).porMedio));
     const resto = fiados.cobrar({ clienteId: ana, monto: 70000, metodo: 'Efectivo', usuarioId });
     check('cobrar el resto reparte entre las dos deudas',
           resto.ok && resto.aplicado.length === 2 && resto.aplicado[0].monto === 67000 && resto.aplicado[1].monto === 3000,

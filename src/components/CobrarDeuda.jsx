@@ -7,8 +7,8 @@ const MOTIVOS = {
   medio_pago_invalido: 'Elige cómo paga.',
   sin_deuda: 'Este cliente ya no debe nada.',
   mas_que_la_deuda: 'Es más de lo que debe.',
-  sin_caja_abierta: 'No hay una caja abierta. Un cobro en efectivo entra al cajón, así que abre la caja primero.',
-  sin_sesion_abierta: 'No hay una caja abierta. Un cobro en efectivo entra al cajón, así que abre la caja primero.',
+  sin_caja_abierta: 'No hay una caja abierta. Todo cobro entra a la caja (efectivo, QR, Llave, tarjeta...), así que abre la caja primero.',
+  sin_sesion_abierta: 'No hay una caja abierta. Todo cobro entra a la caja (efectivo, QR, Llave, tarjeta...), así que abre la caja primero.',
 };
 
 // La cuenta de un cliente -- membresías con saldo y ventas fiadas de la tienda --
