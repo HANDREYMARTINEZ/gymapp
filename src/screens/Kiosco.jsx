@@ -44,6 +44,10 @@ export default function Kiosco() {
   // este aviso el kiosco simplemente no reconoce a nadie, y el 30-sep paso medio
   // dia asi sin que recepcion supiera por que.
   const [lectorAtascado, setLectorAtascado] = useState(false);
+  // Con la segunda pantalla el kiosco puede estar a la vista mientras recepcion
+  // enrola una huella en la principal. En ese rato el lector es de recepcion: un
+  // dedo puesto aqui no marcaria entrada, y sin este aviso pareceria roto.
+  const [lectorOcupado, setLectorOcupado] = useState(false);
   const pinRef = useRef(null);
   const timeoutRef = useRef(null);
 
@@ -61,6 +65,8 @@ export default function Kiosco() {
     });
     window.api.huellas.estaAtascado().then(setLectorAtascado).catch(() => {});
     const dejarDeVigilar = window.api.huellas.onAtasco(setLectorAtascado);
+    window.api.kiosco.lectorOcupado().then(setLectorOcupado).catch(() => {});
+    const dejarDeVerOcupado = window.api.kiosco.onLectorOcupado(setLectorOcupado);
 
     // Al salir del kiosco se apaga la escucha. Sin esto el lector seguia armado
     // en TODAS las pantallas: un dedo mientras alguien estaba en Caja o en
@@ -70,6 +76,7 @@ export default function Kiosco() {
     return () => {
       dejarDeEscuchar();
       dejarDeVigilar();
+      dejarDeVerOcupado();
       window.api.kiosco.detenerEscuchaHuella().catch(() => {});
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -184,6 +191,17 @@ export default function Kiosco() {
         }}>
           {'⚠'} El lector de huella no est&aacute; respondiendo. Marca con tu
           documento y tu PIN. Recepci&oacute;n: si sigue as&iacute;, reinicia el computador.
+        </div>
+      )}
+
+      {lectorOcupado && !lectorAtascado && (
+        <div style={{
+          marginBottom: 20, padding: '10px 14px', fontSize: 15,
+          background: 'var(--aviso-fondo)', border: '1px solid var(--aviso)',
+          borderRadius: 'var(--radio)', color: 'var(--aviso)',
+        }}>
+          {'⏳'} Recepci&oacute;n est&aacute; registrando una huella. Espera un
+          momento o marca con tu documento y tu PIN.
         </div>
       )}
 

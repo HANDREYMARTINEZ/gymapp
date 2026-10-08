@@ -242,6 +242,27 @@ kiosco: {
     ipcRenderer.on('kiosco:huellaDetectada', oyente);
     return () => ipcRenderer.removeListener('kiosco:huellaDetectada', oyente);
   },
+  // true mientras recepcion enrola una huella o el desarrollador entra con la
+  // suya: el lector es uno y en ese rato no lee entradas.
+  lectorOcupado: () => ipcRenderer.invoke('kiosco:lectorOcupado'),
+  onLectorOcupado: (callback) => {
+    const oyente = (_evt, ocupado) => callback(ocupado);
+    ipcRenderer.on('kiosco:lectorOcupado', oyente);
+    return () => ipcRenderer.removeListener('kiosco:lectorOcupado', oyente);
+  },
+},
+
+// El kiosco en el monitor de los clientes. Ver electron/ipc/pantallaKiosco.js.
+pantallaKiosco: {
+  cerrar: () => ipcRenderer.invoke('pantallaKiosco:cerrar'),
+  alternar: () => ipcRenderer.invoke('pantallaKiosco:alternar'),
+  estado: () => ipcRenderer.invoke('pantallaKiosco:estado'),
+  abrirSiRecordada: () => ipcRenderer.invoke('pantallaKiosco:abrirSiRecordada'),
+  onCambio: (callback) => {
+    const oyente = (_evt, abierta) => callback(abierta);
+    ipcRenderer.on('pantallaKiosco:cambio', oyente);
+    return () => ipcRenderer.removeListener('pantallaKiosco:cambio', oyente);
+  },
 },
 
 // El Arduino que suelta el electroiman. Ver electron/services/puerta.js.

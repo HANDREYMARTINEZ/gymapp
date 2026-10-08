@@ -25,6 +25,7 @@ require('./ipc/portapapeles');
 require('./ipc/recordatorios');
 require('./ipc/puerta');
 require('./ipc/fiados');
+const pantallaKiosco = require('./ipc/pantallaKiosco');
 
 
 
@@ -84,6 +85,13 @@ app.whenReady().then(() => {
       sandbox: true,
     },
   });
+
+  // La segunda pantalla del kiosco depende de esta ventana: cerrar la principal
+  // es cerrar la app, y con el kiosco abierto 'window-all-closed' no llegaria
+  // nunca -- ni el respaldo al cerrar. No se olvida que estaba abierta: al volver
+  // a entrar, vuelve.
+  mainWindow.on('close', () => pantallaKiosco.cerrar(false));
+  pantallaKiosco.vigilarMonitores();
 
   // El vigilante de los recordatorios de vencimiento. No manda nada hasta que
   // alguien entre -- necesita la DEK para leer la contrasena del correo -- y por

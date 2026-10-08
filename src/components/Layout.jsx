@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import BotonVolver from './BotonVolver';
 
 // Las secciones van agrupadas por lo que se hace con ellas, no en una lista
@@ -49,6 +49,49 @@ const ANCHO_CERRADO = 68;
 
 export default function Layout({ usuarioActual, pantallaActiva, pantallaAnterior, onSeleccionar, onVolver, onCerrarSesion, children }) {
   const [abierto, setAbierto] = useState(true);
+  const [segundaAbierta, setSegundaAbierta] = useState(false);
+  const [avisoSegunda, setAvisoSegunda] = useState('');
+
+  // La segunda pantalla del kiosco (ver electron/ipc/pantallaKiosco.js). Vive en
+  // el menu y no dentro del Kiosco porque se abre justo para NO tener que ir al
+  // kiosco: recepcion la enciende desde la venta o la ficha en la que este.
+  const puedeKiosco = TODAS.some(o => o.id === 'kiosco' && o.roles.includes(usuarioActual.rol));
+
+  useEffect(() => {
+    if (!puedeKiosco) return undefined;
+    const dejar = window.api.pantallaKiosco.onCambio(setSegundaAbierta);
+    // Si el turno anterior la dejo abierta, vuelve sola al entrar.
+    window.api.pantallaKiosco.abrirSiRecordada()
+      .then(() => window.api.pantallaKiosco.estado())
+      .then(e => setSegundaAbierta(e.abierta))
+      .catch(() => {});
+    return dejar;
+  }, [puedeKiosco]);
+
+  async function alternarSegunda() {
+    const r = await window.api.pantallaKiosco.alternar();
+    // Sin segundo monitor se abre igual, en una ventana: se dice por que no
+    // salio en la otra pantalla para que nadie lo tome por un fallo.
+    if (r && r.ok && r.segundaPantalla === false && !r.yaEstaba) {
+      setAvisoSegunda('No se detectó otra pantalla: el kiosco se abrió en una ventana.');
+      setTimeout(() => setAvisoSegunda(''), 6000);
+    } else {
+      setAvisoSegunda('');
+    }
+  }
+
+  // F2 abre o cierra la segunda pantalla desde cualquier sitio de la app.
+  useEffect(() => {
+    if (!puedeKiosco) return undefined;
+    const atajo = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        alternarSegunda();
+      }
+    };
+    window.addEventListener('keydown', atajo);
+    return () => window.removeEventListener('keydown', atajo);
+  }, [puedeKiosco]);
 
   const grupos = GRUPOS
     .filter(g => !g.soloDev || usuarioActual.desarrollador)
@@ -160,6 +203,24 @@ export default function Layout({ usuarioActual, pantallaActiva, pantallaAnterior
         ))}
 
         <div style={{ flex: 1 }} />
+        {puedeKiosco && (
+          <button
+            onClick={alternarSegunda}
+            title={(segundaAbierta ? 'Quitar' : 'Mostrar') + ' el kiosco en la segunda pantalla (F2)'}
+            style={{
+              width: '100%', padding: abierto ? '8px 12px' : '8px 0', marginBottom: 6,
+              border: '1px solid ' + (segundaAbierta ? 'var(--acento)' : 'var(--borde-suave)'),
+              color: segundaAbierta ? 'var(--acento-claro)' : undefined,
+            }}
+          >
+            {abierto
+              ? (segundaAbierta ? '🖥️ Quitar 2.ª pantalla (F2)' : '🖥️ Kiosco en 2.ª pantalla (F2)')
+              : '🖥️'}
+          </button>
+        )}
+        {abierto && avisoSegunda && (
+          <div style={{ fontSize: 12, color: 'var(--aviso)', marginBottom: 6 }}>{avisoSegunda}</div>
+        )}
         <button
           onClick={onCerrarSesion}
           title="Cerrar sesión"

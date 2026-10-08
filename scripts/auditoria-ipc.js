@@ -45,14 +45,23 @@ for (const m of preload.matchAll(/ipcRenderer\.invoke\(\s*['"]([^'"]+)['"]/g)) i
 const expuestos = new Set();   // "grupo.metodo"
 let grupoActual = null;
 let profundidad = 0;
+// Se cuentan las llaves: antes el grupo se daba por cerrado en el primer "},"
+// suelto, que tambien es como termina un metodo de varias lineas (los onX que
+// devuelven la funcion para dejar de escuchar). Todo lo que venia despues de uno
+// de esos quedaba fuera del grupo y salia como "el preload no lo expone".
+const llaves = (t, c) => t.split(c).length - 1;
 for (const linea of preload.split(/\r?\n/)) {
-  const abre = linea.match(/^\s*(\w+)\s*:\s*\{\s*$/);
-  if (abre && profundidad === 0) { grupoActual = abre[1]; profundidad = 1; continue; }
-  if (profundidad === 1 && /^\s*\},?\s*$/.test(linea)) { grupoActual = null; profundidad = 0; continue; }
-  if (grupoActual) {
+  if (!grupoActual) {
+    const abre = linea.match(/^\s*(\w+)\s*:\s*\{\s*$/);
+    if (abre) { grupoActual = abre[1]; profundidad = 1; }
+    continue;
+  }
+  if (profundidad === 1) {
     const met = linea.match(/^\s*(\w+)\s*:/);
     if (met) expuestos.add(grupoActual + '.' + met[1]);
   }
+  profundidad += llaves(linea, '{') - llaves(linea, '}');
+  if (profundidad <= 0) { grupoActual = null; profundidad = 0; }
 }
 
 // --- C: lo que llaman las pantallas ----------------------------------------

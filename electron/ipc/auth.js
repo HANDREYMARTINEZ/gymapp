@@ -6,6 +6,7 @@ const llaves = require('../services/llaves');
 const sesionDev = require('../services/sesionDev');
 const sidecar = require('../services/sidecarHuella');
 const huellaDev = require('../services/huellaDesarrollador');
+const escuchaKiosco = require('../services/escuchaKiosco');
 const { guardarDekEnMemoria, obtenerDekEnMemoria } = require('../crypto/dek');
 
 function buscarUsuario(usuario) {
@@ -114,11 +115,15 @@ async function entrarComoDesarrollador(via) {
 // recibir el match: la pantalla solo se entera despues, por el evento. Asi un
 // renderer no puede abrir el panel diciendo "ya puse el dedo".
 let oyenteDev = null;
+// Mientras el login espera el dedo del desarrollador, el lector es suyo: la
+// segunda pantalla dice que esta ocupado y, al soltarlo, vuelve a armarse.
+let reservaDev = null;
 
 function detenerEscuchaDev() {
   if (!oyenteDev) return;
   try { sidecar.detenerVerificacion(oyenteDev); } catch (e) {}
   oyenteDev = null;
+  if (reservaDev) { reservaDev.soltar(); reservaDev = null; }
 }
 
 // Lo que el login necesita para decidir si ofrece la huella. 'abierta' es que
@@ -140,10 +145,16 @@ ipcMain.handle('auth:escucharHuellaDev', async (evt) => {
     try { ventana.send('auth:desarrolladorPorHuella', entrada.usuario); } catch (e) { /* ventana cerrada */ }
   };
   oyenteDev = oyente;
+  const reserva = escuchaKiosco.reservar();
+  reservaDev = reserva;
+  await reserva.desarmado;
+  // Se pudo cancelar mientras se desarmaba el kiosco: entonces ya no se arma.
+  if (oyenteDev !== oyente) return { ok: false, motivo: 'cancelado' };
   try {
     await sidecar.iniciarVerificacion(r.templates, oyente);
   } catch (e) {
     oyenteDev = null;
+    if (reservaDev === reserva) { reserva.soltar(); reservaDev = null; }
     return { ok: false, motivo: 'sin_lector' };
   }
   return { ok: true };

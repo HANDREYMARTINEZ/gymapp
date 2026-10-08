@@ -404,6 +404,30 @@ app.whenReady().then(async () => {
       } else anotar('  NO aparece la opcion Fiado en Vender');
     }
 
+    // El kiosco en la segunda pantalla, abierto a media venta: es justo para lo
+    // que existe. Se abre con el boton del menu y se captura la otra ventana.
+    if (await clic('2.ª pantalla')) {
+      await esperar(2500);
+      const kiosco = BrowserWindow.getAllWindows().find(v => v !== ventana && !v.isDestroyed());
+      if (kiosco) {
+        const { screen } = require('electron');
+        const suya = screen.getDisplayMatching(kiosco.getBounds());
+        const principal = screen.getDisplayMatching(ventana.getBounds());
+        anotar('  segunda pantalla: ' + (kiosco.isFullScreen() ? 'pantalla completa' : 'en ventana')
+               + (suya.id !== principal.id ? ', en el otro monitor' : ', en el MISMO monitor')
+               + ' (' + screen.getAllDisplays().length + ' monitores)');
+        const imagen = await kiosco.webContents.capturePage();
+        fs.writeFileSync(path.join(destino, '05c-kiosco-segunda-pantalla.png'), imagen.toPNG());
+        anotar('  capturada: 05c-kiosco-segunda-pantalla.png');
+        const boton = await js(`([...document.querySelectorAll('button')].find(b => b.textContent.includes('2.ª pantalla')) || {}).textContent || ''`);
+        if (!boton.includes('Quitar')) anotar('  el boton NO cambio a "Quitar" con la pantalla abierta: ' + boton);
+        await capturar('05d-vender-con-segunda-pantalla');
+        await clic('2.ª pantalla');
+        await esperar(500);
+        if (!kiosco.isDestroyed()) anotar('  la segunda pantalla NO se cerro con el boton');
+      } else anotar('  NO se abrio la ventana de la segunda pantalla');
+    } else anotar('  NO aparece el boton de la segunda pantalla');
+
     await ir('Caja', '07-caja');
     // Una venta desplegada: lo que llevaba y el boton de anular.
     const abrioVenta = await js(`window.__clicEnTarjeta('Ventas de productos', '#1')`);
