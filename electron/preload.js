@@ -258,6 +258,16 @@ pantallaKiosco: {
   alternar: () => ipcRenderer.invoke('pantallaKiosco:alternar'),
   estado: () => ipcRenderer.invoke('pantallaKiosco:estado'),
   abrirSiRecordada: () => ipcRenderer.invoke('pantallaKiosco:abrirSiRecordada'),
+  // El selector de Configuracion: que monitores hay, cual se eligio, y el
+  // numero grande en cada uno para saber cual es cual.
+  pantallas: () => ipcRenderer.invoke('pantallaKiosco:pantallas'),
+  elegir: (id) => ipcRenderer.invoke('pantallaKiosco:elegir', id),
+  identificar: () => ipcRenderer.invoke('pantallaKiosco:identificar'),
+  onPantallasCambiaron: (callback) => {
+    const oyente = () => callback();
+    ipcRenderer.on('pantallaKiosco:pantallasCambiaron', oyente);
+    return () => ipcRenderer.removeListener('pantallaKiosco:pantallasCambiaron', oyente);
+  },
   onCambio: (callback) => {
     const oyente = (_evt, abierta) => callback(abierta);
     ipcRenderer.on('pantallaKiosco:cambio', oyente);

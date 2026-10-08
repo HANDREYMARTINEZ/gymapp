@@ -20,7 +20,8 @@ Desarrollada por **H.A.M.C Solutions**.
   con **huella**, con **código de barras** del carnet o con un **PIN**. La
   entrada queda registrada con su motivo. Con dos monitores, el kiosco se abre
   en el de los clientes (botón o F2) mientras recepción sigue vendiendo en el
-  otro: los dos comparten el mismo lector de huella.
+  otro: los dos comparten el mismo lector de huella. Con tres o más monitores se
+  elige en cuál sale, y se recoloca solo si se conecta o desconecta alguno.
 - **Puerta.** Un relé gobernado por una placa Arduino abre el torniquete cuando
   el acceso es válido. Los 5 segundos de apertura los cuenta la placa, no el PC.
 - **Punto de venta e inventario.** Productos con código de barras, sabores,

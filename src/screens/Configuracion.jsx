@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import SelectorImagen from '../components/SelectorImagen';
+import SeccionPantallaKiosco from '../components/SeccionPantallaKiosco';
 
 const CAMPOS_GIMNASIO = [
   { clave: 'gym_nombre', etiqueta: 'Nombre' },
@@ -978,6 +979,9 @@ export default function Configuracion({ usuarioActual }) {
           </>
         )}
       </section>
+
+      {/* Tambien del kiosco: en que monitor sale cuando se abre aparte. */}
+      <SeccionPantallaKiosco />
 
       <section style={{ marginBottom: 40 }}>
         <h2>Recordatorios de vencimiento por correo</h2>

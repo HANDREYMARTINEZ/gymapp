@@ -62,22 +62,28 @@ export default function Layout({ usuarioActual, pantallaActiva, pantallaAnterior
     const dejar = window.api.pantallaKiosco.onCambio(setSegundaAbierta);
     // Si el turno anterior la dejo abierta, vuelve sola al entrar.
     window.api.pantallaKiosco.abrirSiRecordada()
-      .then(() => window.api.pantallaKiosco.estado())
+      .then(r => { avisarSegunda(r); return window.api.pantallaKiosco.estado(); })
       .then(e => setSegundaAbierta(e.abierta))
       .catch(() => {});
     return dejar;
   }, [puedeKiosco]);
 
-  async function alternarSegunda() {
-    const r = await window.api.pantallaKiosco.alternar();
-    // Sin segundo monitor se abre igual, en una ventana: se dice por que no
-    // salio en la otra pantalla para que nadie lo tome por un fallo.
-    if (r && r.ok && r.segundaPantalla === false && !r.yaEstaba) {
-      setAvisoSegunda('No se detectó otra pantalla: el kiosco se abrió en una ventana.');
-      setTimeout(() => setAvisoSegunda(''), 6000);
-    } else {
-      setAvisoSegunda('');
+  // Lo que se dice en el menu cuando el kiosco no salio donde se esperaba.
+  function avisarSegunda(r) {
+    let texto = '';
+    if (r && r.ok && !r.yaEstaba) {
+      // Sin segundo monitor se abre igual, en una ventana: se dice por que no
+      // salio en la otra pantalla para que nadie lo tome por un fallo.
+      if (r.segundaPantalla === false) texto = 'No se detectó otra pantalla: el kiosco se abrió en una ventana.';
+      else if (r.aviso === 'elegida_no_esta') texto = 'La pantalla elegida para el kiosco no está conectada: se abrió en otra.';
+      else if (r.aviso === 'elegida_es_recepcion') texto = 'GymApp está en la pantalla elegida para el kiosco: se abrió en otra.';
     }
+    setAvisoSegunda(texto);
+    if (texto) setTimeout(() => setAvisoSegunda(''), 8000);
+  }
+
+  async function alternarSegunda() {
+    avisarSegunda(await window.api.pantallaKiosco.alternar());
   }
 
   // F2 abre o cierra la segunda pantalla desde cualquier sitio de la app.

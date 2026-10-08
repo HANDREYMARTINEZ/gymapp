@@ -1,6 +1,6 @@
 {
   "name": "gymapp",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Administracion de gimnasio: clientes, membresias, asistencias, punto de venta, inventario y caja.",
   "main": "electron/main.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "build:vite": "vite build",
-    "test": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js && electron test/desbloqueo.js && electron test/imagenes.js && electron test/membresias.js && electron test/panel-clientes.js && electron test/huellas.js && electron test/escucha-kiosco.js && electron test/fuera-de-caja.js && electron test/arranque.js && electron test/caja-detalle.js && electron test/intercambio.js && electron test/sidecar.js && electron test/kiosco-pin.js && electron test/puerta.js && electron test/lector.js && electron test/productos.js && electron test/caja.js && electron test/ventas.js && electron test/fiados.js && electron test/usuarios.js && electron test/dashboard.js && electron test/desarrollador.js && electron test/documento-provisional.js && electron test/recordatorios.js && electron test/ensayo-correos.js",
+    "test": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js && electron test/desbloqueo.js && electron test/imagenes.js && electron test/membresias.js && electron test/panel-clientes.js && electron test/huellas.js && electron test/escucha-kiosco.js && electron test/pantalla-kiosco.js && electron test/fuera-de-caja.js && electron test/arranque.js && electron test/caja-detalle.js && electron test/intercambio.js && electron test/sidecar.js && electron test/kiosco-pin.js && electron test/puerta.js && electron test/lector.js && electron test/productos.js && electron test/caja.js && electron test/ventas.js && electron test/fiados.js && electron test/usuarios.js && electron test/dashboard.js && electron test/desarrollador.js && electron test/documento-provisional.js && electron test/recordatorios.js && electron test/ensayo-correos.js",
     "test:respaldos": "electron test/respaldos-wal.js && electron test/respaldos-restaurar.js",
     "test:desbloqueo": "electron test/desbloqueo.js",
     "test:imagenes": "electron test/imagenes.js",
@@ -16,6 +16,7 @@
     "test:panel-clientes": "electron test/panel-clientes.js",
     "test:huellas": "electron test/huellas.js",
     "test:escucha-kiosco": "electron test/escucha-kiosco.js",
+    "test:pantalla-kiosco": "electron test/pantalla-kiosco.js",
     "test:fuera-de-caja": "electron test/fuera-de-caja.js",
     "test:arranque": "electron test/arranque.js",
     "test:caja-detalle": "electron test/caja-detalle.js",

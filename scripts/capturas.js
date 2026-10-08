@@ -490,6 +490,49 @@ app.whenReady().then(async () => {
     await esperar(500);
     await capturar('16b-configuracion-puerta');
 
+    // En que monitor sale el kiosco. Con monitores de verdad se comprueba de
+    // punta a punta: elegir uno, abrir el kiosco y que salga justo en ese.
+    await js(`(() => {
+      const h = [...document.querySelectorAll('main h2')].find(x => x.textContent.indexOf('Pantalla del kiosco') === 0);
+      if (h) h.scrollIntoView({ block: 'start' });
+      return !!h;
+    })()`) || anotar('  NO aparece la seccion Pantalla del kiosco');
+    await esperar(500);
+    await capturar('16c-configuracion-pantalla-kiosco');
+    {
+      const { screen } = require('electron');
+      const lista = await js(`window.api.pantallaKiosco.pantallas()`);
+      anotar('  pantallas: ' + lista.pantallas.map(p => p.numero + '=' + p.modelo + (p.recepcion ? '(recepcion)' : '')).join(', '));
+      if (lista.pantallas.length >= 2) {
+        const antes = BrowserWindow.getAllWindows().length;
+        await js(`window.api.pantallaKiosco.identificar()`);
+        await esperar(1200);
+        const durante = BrowserWindow.getAllWindows().length - antes;
+        await esperar(4000);
+        const despues = BrowserWindow.getAllWindows().length - antes;
+        anotar('  identificar: ' + durante + ' numeros en pantalla, ' + despues + ' a los 5 s');
+
+        const otra = lista.pantallas.find(p => !p.recepcion);
+        const r = await js(`window.api.pantallaKiosco.elegir(${JSON.stringify(String(otra.id))})`);
+        if (!r.ok || r.elegidaId !== otra.id) anotar('  NO se pudo elegir la pantalla ' + otra.numero);
+        const recep = lista.pantallas.find(p => p.recepcion);
+        const mal = await js(`window.api.pantallaKiosco.elegir(${JSON.stringify(String(recep.id))})`);
+        if (mal.ok) anotar('  se dejo elegir la pantalla de recepcion');
+        await esperar(400);
+        await capturar('16c2-configuracion-pantalla-elegida');
+
+        await js(`window.api.pantallaKiosco.alternar()`);
+        await esperar(2000);
+        const kiosco = BrowserWindow.getAllWindows().find(v => v !== ventana && !v.isDestroyed());
+        const donde = kiosco ? screen.getDisplayMatching(kiosco.getBounds()).id : null;
+        anotar('  kiosco abierto en la elegida: ' + (donde === otra.id ? 'si' : 'NO (' + donde + ')')
+               + (kiosco && kiosco.isFullScreen() ? ', pantalla completa' : ''));
+        await js(`window.api.pantallaKiosco.cerrar()`);
+        await js(`window.api.pantallaKiosco.elegir(null)`);
+        await esperar(500);
+      }
+    }
+
     // Marcar la casilla SIN guardar tiene que sacar el aviso amarillo. Es la
     // trampa en la que se cayo la primera prueba de verdad: casilla marcada,
     // Guardar sin pulsar, y el kiosco sin abrir nada.
@@ -515,7 +558,7 @@ app.whenReady().then(async () => {
     await capturar('16d-configuracion-recordatorios');
     const marcoRepetir = await js(`(() => {
       const c = [...document.querySelectorAll('main input[type=checkbox]')]
-        .find(x => (x.parentElement.textContent || '').indexOf('Volver a escribirles') >= 0);
+        .find(x => (x.parentElement.textContent || '').indexOf('Volver a escribirle') >= 0);
       if (!c) return false;
       c.click();
       return true;
