@@ -263,6 +263,12 @@ pantallaKiosco: {
   pantallas: () => ipcRenderer.invoke('pantallaKiosco:pantallas'),
   elegir: (id) => ipcRenderer.invoke('pantallaKiosco:elegir', id),
   identificar: () => ipcRenderer.invoke('pantallaKiosco:identificar'),
+  // Teclas del bloque numerico, solo en la ventana del kiosco.
+  onTecla: (cb) => {
+    const oyente = (_e, tecla) => cb(tecla);
+    ipcRenderer.on('pantallaKiosco:tecla', oyente);
+    return () => ipcRenderer.removeListener('pantallaKiosco:tecla', oyente);
+  },
   onPantallasCambiaron: (callback) => {
     const oyente = () => callback();
     ipcRenderer.on('pantallaKiosco:pantallasCambiaron', oyente);

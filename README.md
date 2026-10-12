@@ -22,6 +22,8 @@ Desarrollada por **H.A.M.C Solutions**.
   en el de los clientes (botón o F2) mientras recepción sigue vendiendo en el
   otro: los dos comparten el mismo lector de huella. Con tres o más monitores se
   elige en cuál sale, y se recoloca solo si se conecta o desconecta alguno.
+  Mientras está abierto, el teclado numérico es del kiosco: el cliente marca
+  documento y PIN sin mouse, aunque recepción tenga el foco en otra ventana.
 - **Puerta.** Un relé gobernado por una placa Arduino abre el torniquete cuando
   el acceso es válido. Los 5 segundos de apertura los cuenta la placa, no el PC.
 - **Punto de venta e inventario.** Productos con código de barras, sabores,

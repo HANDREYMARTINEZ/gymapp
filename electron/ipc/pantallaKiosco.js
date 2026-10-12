@@ -2,6 +2,7 @@ const { ipcMain, BrowserWindow, screen } = require('electron');
 const path = require('path');
 const { getDb } = require('../db/connection');
 const { numerar, buscarGuardada, elegirDestino } = require('../services/eleccionPantalla');
+const tecladoKiosco = require('../services/tecladoKiosco');
 
 // El kiosco en la segunda pantalla (pedido el 07-oct-2026). El gimnasio tiene
 // dos monitores: el de recepcion y uno que mira a los clientes. Antes, para que
@@ -146,10 +147,19 @@ function abrir(principal) {
     if (destino) esta.setFullScreen(true);
   });
 
+  // El teclado numerico de los clientes escribe aqui aunque el foco siga en
+  // recepcion (ver services/tecladoKiosco.js).
+  tecladoKiosco.activar((tecla) => {
+    if (!esta.isDestroyed()) esta.webContents.send('pantallaKiosco:tecla', tecla);
+  });
+  tecladoKiosco.vigilar(esta.webContents);
+  if (principal && !principal.isDestroyed()) tecladoKiosco.vigilar(principal.webContents);
+
   esta.on('closed', () => {
     if (ventana === esta) {
       ventana = null;
       destinoId = null;
+      tecladoKiosco.desactivar();
     }
     avisarCambio();
   });
@@ -174,6 +184,7 @@ function cerrar(recordarCerrada = true) {
     cerradaPorMonitor = false;
   }
   if (estaAbierta()) ventana.destroy();
+  tecladoKiosco.desactivar();
   ventana = null;
   destinoId = null;
   avisarPantallas();

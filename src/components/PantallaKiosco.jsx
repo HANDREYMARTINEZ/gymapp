@@ -49,7 +49,7 @@ export default function PantallaKiosco() {
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{ zoom: escala, width: '100%', paddingBottom: 48 }}>
-        <Kiosco />
+        <Kiosco tecladoNumerico />
       </div>
     </div>
   );

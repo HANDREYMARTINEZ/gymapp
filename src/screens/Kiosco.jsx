@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Miniatura from '../components/Miniatura';
+import { aplicarTecla } from '../kiosco/tecladoNumerico.mjs';
 
 const MENSAJES = {
   no_registrado: { color: 'var(--error)', texto: 'No registrado' },
@@ -32,7 +33,10 @@ const PUERTA = {
   fallo: { color: 'var(--aviso)', texto: 'La puerta no respondió — pide que te abran' },
 };
 
-export default function Kiosco() {
+// tecladoNumerico: true solo en la ventana de la segunda pantalla, donde el
+// bloque numerico escribe aqui aunque el foco este en recepcion (ver
+// src/kiosco/tecladoNumerico.mjs).
+export default function Kiosco({ tecladoNumerico = false }) {
   const [nombreGym, setNombreGym] = useState('');
 
   const [ult4, setUlt4] = useState('');
@@ -94,18 +98,53 @@ export default function Kiosco() {
     timeoutRef.current = setTimeout(limpiarTodo, 4000);
   }
 
-  async function marcar() {
-    if (ult4.length !== 4 || pin.length !== 4) {
+  // Con el teclado numerico se marca en el mismo instante en que se teclea el
+  // ultimo digito, antes de que React haya pintado el estado nuevo: por eso los
+  // valores pueden llegar como argumentos.
+  async function marcar(u = ult4, p = pin) {
+    if (u.length !== 4 || p.length !== 4) {
       setErrorCampos('Ingresa los 4 dígitos del documento y los 4 del PIN');
       return;
     }
     setErrorCampos('');
+    enviandoRef.current = true;
     setEnviando(true);
-    const r = await window.api.kiosco.marcarPorPin({ ult4, pin });
-    setEnviando(false);
+    let r;
+    try {
+      r = await window.api.kiosco.marcarPorPin({ ult4: u, pin: p });
+    } finally {
+      enviandoRef.current = false;
+      setEnviando(false);
+    }
     setResultado(r);
     programarLimpieza();
   }
+
+  // Lo que el oyente del teclado necesita leer al llegar cada tecla: el oyente
+  // se instala una vez y, sin esto, veria siempre los valores del primer render.
+  const enviandoRef = useRef(false);
+  const actualRef = useRef({});
+  actualRef.current = { ult4, pin, hayResultado: !!resultado, marcar };
+
+  useEffect(() => {
+    if (!tecladoNumerico) return undefined;
+    return window.api.pantallaKiosco.onTecla((tecla) => {
+      const a = actualRef.current;
+      const r = aplicarTecla({ ...a, enviando: enviandoRef.current }, tecla);
+      if (!r) return;
+      if (r.limpiarResultado) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setResultado(null);
+      }
+      // Se actualiza ya, sin esperar al render: dos teclas muy seguidas tienen
+      // que ver cada una el digito de la anterior.
+      actualRef.current = { ...a, ult4: r.ult4, pin: r.pin, hayResultado: false };
+      setUlt4(r.ult4);
+      setPin(r.pin);
+      setErrorCampos('');
+      if (r.marcar) a.marcar(r.ult4, r.pin);
+    });
+  }, [tecladoNumerico]);
 
   function tecla(e) {
     if (e.key === 'Enter') marcar();
@@ -234,7 +273,14 @@ export default function Kiosco() {
             style={{ fontSize: 24, width: '100%', textAlign: 'center', padding: 10, marginTop: 10 }}
           />
           {errorCampos && <p style={{ color: 'var(--error)', marginTop: 8 }}>{errorCampos}</p>}
-          <button onClick={marcar} disabled={enviando} style={{ fontSize: 20, width: '100%', padding: 14, marginTop: 16 }}>
+          {tecladoNumerico && (
+            <p style={{ fontSize: 15, color: 'var(--texto-suave)', marginTop: 10 }}>
+              Con el teclado num&eacute;rico: los 4 &uacute;ltimos de tu documento y
+              tu PIN, seguidos. El punto borra.
+            </p>
+          )}
+          {/* Flecha: onClick pasaria el evento del clic como si fuera el documento. */}
+          <button onClick={() => marcar()} disabled={enviando} style={{ fontSize: 20, width: '100%', padding: 14, marginTop: 16 }}>
             {enviando ? 'Verificando...' : 'Marcar asistencia'}
           </button>
         </div>
